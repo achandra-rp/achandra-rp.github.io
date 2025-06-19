@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Guide: Knative, Kafka & KEDA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Cool Slate -->
+    <!-- Application Structure Plan: A single-page layout with a fixed sidebar for navigation, promoting non-linear exploration. The core of the app is an interactive, animated diagram of the two-tiered scaling model, the central concept of the report. This visual-first approach is better than text for explaining a complex process. A secondary section allows users to simulate the scaling behavior by adjusting parameters with sliders and seeing the impact on live-updating charts. This hands-on element makes the abstract concepts of tuning tangible. Detailed information from the report (like YAML files and best practices) is organized into accessible, tabbed sections to avoid overwhelming the user. This structure prioritizes understanding the core process first, then allows for deeper dives as needed. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: The core architectural flow (Event -> Kafka -> KEDA -> Dispatcher -> KPA -> Service). Goal: Explain dynamic relationships. Viz/Presentation: An animated diagram built with HTML/CSS/JS. Interaction: A "play" button to start the animation; hover/click on components for tooltips. Justification: A dynamic process is best explained with a dynamic visualization. Library/Method: HTML/CSS/JS.
+        - Report Info: Relationship between Kafka Lag, Dispatcher Replicas, HTTP Rate, and Service Replicas. Goal: Compare outcomes based on tuning. Viz/Presentation: Two side-by-side, dynamic line charts. Interaction: Users manipulate sliders for `Event Rate`, `KEDA Lag Threshold`, and `Service Concurrency Target`. Charts update in real-time. Justification: Provides a direct, interactive way to learn system tuning. Library/Method: Chart.js (Canvas).
+        - Report Info: Component descriptions. Goal: Inform about individual technologies. Viz/Presentation: Simple box-and-arrow diagrams built with styled HTML divs. Justification: Simplifies complex architectural descriptions. Library/Method: HTML/CSS (Tailwind).
+        - Report Info: YAML configuration files. Goal: Provide usable code examples. Viz/Presentation: Code blocks with syntax highlighting. Interaction: "Copy to clipboard" button. Justification: Improves developer usability. Library/Method: HTML/CSS/JS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .nav-link { transition: all 0.2s ease-in-out; }
+        .nav-link.active { background-color: #3b82f6; color: white; }
+        .nav-link:not(.active):hover { background-color: #e5e7eb; }
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .tab-button.active { border-color: #3b82f6; color: #3b82f6; background-color: #eff6ff; }
+        .diagram-box { transition: all 0.3s ease-in-out; border: 2px solid #e5e7eb; }
+        .diagram-arrow { transition: all 0.3s ease-in-out; }
+        .highlight-box { border-color: #3b82f6 !important; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); transform: scale(1.03); }
+        .highlight-arrow { color: #3b82f6 !important; transform: scale(1.1); }
+        .code-block { background-color: #1f2937; color: #d1d5db; font-family: 'Courier New', Courier, monospace; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 300px; max-height: 40vh; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Sidebar Navigation -->
+        <nav class="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-shrink-0">
+            <div class="p-4">
+                <h1 class="text-xl font-bold text-blue-600">Knative Scaling Guide</h1>
+                <p class="text-sm text-slate-500 mt-1">An Interactive Overview</p>
+            </div>
+            <ul class="flex flex-row md:flex-col p-2 space-x-1 md:space-x-0 md:space-y-1" id="navigation">
+                <li><a href="#introduction" class="nav-link flex items-center p-3 rounded-lg text-sm font-medium active"><span>🏠</span><span class="ml-3">Introduction</span></a></li>
+                <li><a href="#components" class="nav-link flex items-center p-3 rounded-lg text-sm font-medium"><span>🧱</span><span class="ml-3">Core Components</span></a></li>
+                <li><a href="#scaling-model" class="nav-link flex items-center p-3 rounded-lg text-sm font-medium"><span>🔄</span><span class="ml-3">The Scaling Model</span></a></li>
+                <li><a href="#simulator" class="nav-link flex items-center p-3 rounded-lg text-sm font-medium"><span>⚙️</span><span class="ml-3">Tuning Simulator</span></a></li>
+                <li><a href="#deep-dive" class="nav-link flex items-center p-3 rounded-lg text-sm font-medium"><span>📚</span><span class="ml-3">Deeper Dive</span></a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+            
+            <!-- Introduction Section -->
+            <section id="introduction" class="content-section active">
+                <h2 class="text-3xl font-bold mb-4">Architecting Responsive Serverless Systems</h2>
+                <p class="text-lg text-slate-600 mb-6">This interactive guide explores the synergy between Knative, Apache Kafka, and KEDA to build highly scalable, event-driven applications on Kubernetes. It breaks down how these technologies work together, moving beyond theory to provide a clear, visual understanding of the entire architecture, from event production to serverless function execution.</p>
+                <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg">
+                    <p>The central theme is the **two-tiered autoscaling model**: KEDA scales the event-ingestion layer based on Kafka message backlogs, which in turn creates HTTP traffic that allows Knative's own autoscaler to scale the application layer. This creates a system that's both event-driven and resource-efficient, scaling to zero when idle and rapidly expanding to meet demand.</p>
+                </div>
+            </section>
+
+            <!-- Core Components Section -->
+            <section id="components" class="content-section">
+                <h2 class="text-3xl font-bold mb-2">The Core Components</h2>
+                <p class="text-slate-600 mb-6">This architecture relies on three key open-source projects. Understand their roles before seeing how they connect.</p>
+                <div class="mb-4 border-b border-slate-200">
+                    <nav class="flex space-x-2" id="components-tabs-buttons">
+                        <button data-tab="knative" class="tab-button py-3 px-4 text-sm font-medium text-center text-slate-500 rounded-t-lg border-b-2 border-transparent hover:text-slate-600 hover:border-slate-300 active">Knative</button>
+                        <button data-tab="kafka" class="tab-button py-3 px-4 text-sm font-medium text-center text-slate-500 rounded-t-lg border-b-2 border-transparent hover:text-slate-600 hover:border-slate-300">Kafka Broker</button>
+                        <button data-tab="keda" class="tab-button py-3 px-4 text-sm font-medium text-center text-slate-500 rounded-t-lg border-b-2 border-transparent hover:text-slate-600 hover:border-slate-300">KEDA</button>
+                    </nav>
+                </div>
+                <div id="components-tabs-content">
+                    <div id="tab-knative" class="tab-content active">
+                        <h3 class="text-2xl font-semibold mb-3">Knative: Serverless on Kubernetes</h3>
+                        <p class="mb-4">Knative extends Kubernetes to provide serverless capabilities. It has two main parts relevant to our architecture:</p>
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-white p-6 rounded-lg border border-slate-200">
+                                <h4 class="font-bold text-lg mb-2">Knative Serving</h4>
+                                <p class="text-sm text-slate-600 mb-3">Manages request-driven workloads. Its key feature is the Knative Pod Autoscaler (KPA), which scales pods based on incoming HTTP traffic and can scale to zero.</p>
+                                <div class="font-mono text-xs p-3 bg-slate-100 rounded">Service → Route → Configuration → Revision</div>
+                            </div>
+                            <div class="bg-white p-6 rounded-lg border border-slate-200">
+                                <h4 class="font-bold text-lg mb-2">Knative Eventing</h4>
+                                <p class="text-sm text-slate-600 mb-3">Provides building blocks for event-driven applications, decoupling event producers from consumers using primitives like Brokers and Triggers.</p>
+                                <div class="font-mono text-xs p-3 bg-slate-100 rounded">Source → Broker → Trigger → Sink</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tab-kafka" class="tab-content hidden">
+                        <h3 class="text-2xl font-semibold mb-3">Kafka: The Eventing Backbone</h3>
+                        <p class="mb-4">Using the Knative Kafka Broker implementation provides a durable, high-performance messaging layer. Knative concepts are mapped directly to Kafka primitives:</p>
+                        <div class="space-y-4">
+                            <div class="flex items-center bg-white p-4 rounded-lg border border-slate-200">
+                                <span class="text-2xl mr-4">🗃️</span>
+                                <div><span class="font-bold">Knative Broker</span> maps to a <span class="font-mono bg-slate-100 px-2 py-1 rounded">Kafka Topic</span> for persistent event storage.</div>
+                            </div>
+                            <div class="flex items-center bg-white p-4 rounded-lg border border-slate-200">
+                                <span class="text-2xl mr-4">🎯</span>
+                                <div><span class="font-bold">Knative Trigger</span> maps to a <span class="font-mono bg-slate-100 px-2 py-1 rounded">Kafka Consumer Group</span>, ensuring isolated consumption for each subscriber.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tab-keda" class="tab-content hidden">
+                        <h3 class="text-2xl font-semibold mb-3">KEDA: Event-Driven Autoscaling</h3>
+                        <p class="mb-4">Kubernetes Event-driven Autoscaling (KEDA) extends the standard Horizontal Pod Autoscaler (HPA) to scale applications based on external metrics from event sources, not just CPU/memory.</p>
+                         <div class="bg-white p-6 rounded-lg border border-slate-200">
+                            <h4 class="font-bold text-lg mb-2">Key Functionality</h4>
+                            <p class="text-sm text-slate-600">For this architecture, KEDA's `kafka` scaler monitors a consumer group's lag on a topic. When the lag passes a defined threshold, KEDA scales the target workload (in our case, the Knative Kafka Dispatcher). KEDA also manages scaling from and to zero replicas.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Two-Tiered Scaling Model Section -->
+            <section id="scaling-model" class="content-section">
+                <h2 class="text-3xl font-bold mb-2">Interactive Scaling Model</h2>
+                <p class="text-slate-600 mb-6">This is the core of the architecture. KEDA drives the scaling of the event infrastructure (Tier 1), which then drives the scaling of the application (Tier 2). Click "Animate Flow" to see it in action.</p>
+                
+                <div class="text-center mb-6">
+                    <button id="animate-flow-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">
+                        ▶️ Animate Flow
+                    </button>
+                </div>
+
+                <div class="relative bg-white p-4 md:p-8 rounded-xl border border-slate-200 overflow-x-auto">
+                    <div class="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-4 min-w-[700px]">
+                        <div id="d-producer" class="diagram-box p-4 rounded-lg text-center w-40">
+                            <h4 class="font-semibold">Producer</h4>
+                            <p class="text-sm text-slate-500">Sends events</p>
+                        </div>
+                        
+                        <div id="d-arrow-1" class="diagram-arrow text-3xl font-light text-slate-300 transform md:-rotate-0 rotate-90">→</div>
+
+                        <div id="d-kafka" class="diagram-box p-4 rounded-lg text-center w-48">
+                            <h4 class="font-semibold">Kafka Topic</h4>
+                            <p id="d-kafka-lag" class="text-sm text-slate-500">Lag: 0</p>
+                        </div>
+
+                        <div id="d-arrow-2" class="diagram-arrow text-3xl font-light text-slate-300 transform md:-rotate-0 rotate-90">→</div>
+
+                        <div class="text-center">
+                             <div id="d-keda" class="diagram-box p-4 rounded-lg text-center w-40">
+                                <h4 class="font-semibold">KEDA</h4>
+                                <p class="text-sm text-slate-500">Monitors Lag</p>
+                            </div>
+                            <div class="text-2xl my-2 text-slate-300">↓</div>
+                            <div id="d-dispatcher" class="diagram-box p-4 rounded-lg text-center w-48">
+                                <h4 class="font-semibold">Dispatcher (Tier 1)</h4>
+                                <p id="d-dispatcher-replicas" class="text-sm text-slate-500">Replicas: 0</p>
+                            </div>
+                        </div>
+                        
+                        <div id="d-arrow-3" class="diagram-arrow text-3xl font-light text-slate-300 transform md:-rotate-0 rotate-90">→</div>
+
+                        <div class="text-center">
+                            <div id="d-kpa" class="diagram-box p-4 rounded-lg text-center w-40">
+                                <h4 class="font-semibold">KPA</h4>
+                                <p class="text-sm text-slate-500">Monitors Requests</p>
+                            </div>
+                            <div class="text-2xl my-2 text-slate-300">↓</div>
+                             <div id="d-service" class="diagram-box p-4 rounded-lg text-center w-48">
+                                <h4 class="font-semibold">Service (Tier 2)</h4>
+                                <p id="d-service-replicas" class="text-sm text-slate-500">Replicas: 0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tuning Simulator Section -->
+            <section id="simulator" class="content-section">
+                <h2 class="text-3xl font-bold mb-2">Tuning Simulator</h2>
+                <p class="text-slate-600 mb-6">The relationship between the two scaling tiers is critical. Adjust the sliders below to see how different parameters would affect system behavior under a simulated event burst. This helps visualize the "impedance mismatch" between Kafka's parallelism and your service's concurrency.</p>
+                
+                <div class="grid md:grid-cols-3 gap-6 bg-white p-6 rounded-lg border border-slate-200 mb-6">
+                    <div>
+                        <label for="eventRate" class="font-medium">Event Rate (events/s)</label>
+                        <input id="eventRate" type="range" min="50" max="1000" value="200" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <span id="eventRateValue" class="text-sm text-slate-500">200</span>
+                    </div>
+                    <div>
+                        <label for="lagThreshold" class="font-medium">KEDA Lag Threshold</label>
+                        <input id="lagThreshold" type="range" min="10" max="200" value="50" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <span id="lagThresholdValue" class="text-sm text-slate-500">50</span>
+                    </div>
+                     <div>
+                        <label for="concurrencyTarget" class="font-medium">Service Concurrency Target</label>
+                        <input id="concurrencyTarget" type="range" min="1" max="50" value="10" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <span id="concurrencyTargetValue" class="text-sm text-slate-500">10</span>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-3 text-center">Tier 1: Event Ingestion</h3>
+                        <div class="chart-container bg-white p-4 rounded-lg border border-slate-200">
+                            <canvas id="tier1Chart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold mb-3 text-center">Tier 2: Application Processing</h3>
+                        <div class="chart-container bg-white p-4 rounded-lg border border-slate-200">
+                            <canvas id="tier2Chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Deeper Dive Section -->
+            <section id="deep-dive" class="content-section">
+                <h2 class="text-3xl font-bold mb-2">Deeper Dive</h2>
+                <p class="text-slate-600 mb-6">Explore the implementation details, configurations, and best practices.</p>
+                 <div class="mb-4 border-b border-slate-200">
+                    <nav class="flex space-x-2" id="dive-tabs-buttons">
+                        <button data-tab="implementation" class="tab-button py-3 px-4 text-sm font-medium text-center text-slate-500 rounded-t-lg border-b-2 border-transparent hover:text-slate-600 hover:border-slate-300 active">Implementation</button>
+                        <button data-tab="practices" class="tab-button py-3 px-4 text-sm font-medium text-center text-slate-500 rounded-t-lg border-b-2 border-transparent hover:text-slate-600 hover:border-slate-300">Best Practices</button>
+                    </nav>
+                </div>
+                <div id="dive-tabs-content">
+                    <div id="tab-implementation" class="tab-content active space-y-4">
+                        <h3 class="text-xl font-semibold">Example Manifests</h3>
+                        <p>The following manifests demonstrate a complete end-to-end flow.</p>
+                        <div class="code-container">
+                            <h4 class="font-medium mb-1">Subscriber Knative Service</h4>
+                            <pre class="code-block p-4 rounded-lg text-sm overflow-x-auto"><code>apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: order-processor
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/target: "10"
+    spec:
+      containers:
+        - image: gcr.io/knative-samples/helloworld-go</code></pre>
+                        </div>
+                         <div class="code-container">
+                            <h4 class="font-medium mb-1">Knative Trigger with KEDA Annotations</h4>
+                            <pre class="code-block p-4 rounded-lg text-sm overflow-x-auto"><code>apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: order-processor-trigger
+  annotations:
+    autoscaling.knative.dev/class: keda.autoscaling.knative.dev
+    autoscaling.knative.dev/min-scale: "0"
+    autoscaling.knative.dev/max-scale: "10"
+    keda.autoscaling.knative.dev/kafkaLagThreshold: "50"
+spec:
+  broker: default
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: order-processor</code></pre>
+                        </div>
+                    </div>
+                    <div id="tab-practices" class="tab-content hidden">
+                        <h3 class="text-xl font-semibold mb-4">Production Best Practices</h3>
+                        <ul class="space-y-4">
+                            <li class="bg-white p-4 border border-slate-200 rounded-lg">
+                                <h4 class="font-bold">Use Dead Letter Sinks (DLS)</h4>
+                                <p class="text-sm text-slate-600">Configure a `deadLetterSink` on your Broker or Trigger to capture events that fail processing after all retries. This prevents data loss and allows for later analysis or reprocessing.</p>
+                            </li>
+                            <li class="bg-white p-4 border border-slate-200 rounded-lg">
+                                <h4 class="font-bold">Choose the Right Data Plane Mode</h4>
+                                <p class="text-sm text-slate-600">Use the `KafkaNamespaced` broker class for multi-tenant environments to provide performance and security isolation between namespaces. The default shared `Kafka` class is efficient for single-tenant clusters.</p>
+                            </li>
+                            <li class="bg-white p-4 border border-slate-200 rounded-lg">
+                                <h4 class="font-bold">Tune Ordered Delivery</h4>
+                                <p class="text-sm text-slate-600">To manage the "impedance mismatch," use the `kafka.eventing.knative.dev/delivery.order: ordered` annotation. This creates backpressure by forcing the dispatcher to wait for a success response before sending the next message from a given partition, preventing it from overwhelming the service.</p>
+                            </li>
+                             <li class="bg-white p-4 border border-slate-200 rounded-lg">
+                                <h4 class="font-bold">Monitor Key Metrics</h4>
+                                <p class="text-sm text-slate-600">Observe `kafka_consumergroup_lag`, dispatcher replica counts, `queue_average_concurrent_requests` for the service, and service replica counts to get a holistic view of the entire scaling pipeline.</p>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- Navigation Logic ---
+            const navLinks = document.querySelectorAll('#navigation a');
+            const contentSections = document.querySelectorAll('.content-section');
+
+            const switchContent = (hash) => {
+                navLinks.forEach(link => {
+                    link.classList.toggle('active', link.hash === hash);
+                });
+                contentSections.forEach(section => {
+                    section.classList.toggle('active', `#${section.id}` === hash);
+                });
+            };
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const targetHash = e.currentTarget.hash;
+                    window.location.hash = targetHash;
+                    switchContent(targetHash);
+                });
+            });
+
+            // Initial load based on hash or default
+            const initialHash = window.location.hash || '#introduction';
+            switchContent(initialHash);
+
+
+            // --- Generic Tab Logic ---
+            const initTabs = (containerId) => {
+                const tabButtonsContainer = document.getElementById(`${containerId}-buttons`);
+                const tabContentsContainer = document.getElementById(`${containerId}-content`);
+                if (!tabButtonsContainer || !tabContentsContainer) return;
+
+                const tabButtons = tabButtonsContainer.querySelectorAll('.tab-button');
+                const tabContents = tabContentsContainer.querySelectorAll('.tab-content');
+
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        tabButtons.forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+                        
+                        const tabId = button.dataset.tab;
+                        tabContents.forEach(content => {
+                            content.classList.toggle('hidden', content.id !== `tab-${tabId}`);
+                            content.classList.toggle('active', content.id === `tab-${tabId}`);
+                        });
+                    });
+                });
+            };
+
+            initTabs('components-tabs');
+            initTabs('dive-tabs');
+            
+            // --- Diagram Animation Logic ---
+            const animateButton = document.getElementById('animate-flow-btn');
+            const elements = {
+                producer: document.getElementById('d-producer'),
+                arrow1: document.getElementById('d-arrow-1'),
+                kafka: document.getElementById('d-kafka'),
+                kafkaLag: document.getElementById('d-kafka-lag'),
+                arrow2: document.getElementById('d-arrow-2'),
+                keda: document.getElementById('d-keda'),
+                dispatcher: document.getElementById('d-dispatcher'),
+                dispatcherReplicas: document.getElementById('d-dispatcher-replicas'),
+                arrow3: document.getElementById('d-arrow-3'),
+                kpa: document.getElementById('d-kpa'),
+                service: document.getElementById('d-service'),
+                serviceReplicas: document.getElementById('d-service-replicas'),
+            };
+
+            let animationRunning = false;
+
+            const resetAnimation = () => {
+                Object.values(elements).forEach(el => {
+                    if (el.classList) {
+                       el.classList.remove('highlight-box', 'highlight-arrow');
+                    }
+                });
+                elements.kafkaLag.textContent = 'Lag: 0';
+                elements.dispatcherReplicas.textContent = 'Replicas: 0';
+                elements.serviceReplicas.textContent = 'Replicas: 0';
+                animateButton.disabled = false;
+                animateButton.innerHTML = '▶️ Animate Flow';
+                animationRunning = false;
+            };
+
+            animateButton.addEventListener('click', () => {
+                if (animationRunning) return;
+                animationRunning = true;
+                animateButton.disabled = true;
+                animateButton.textContent = 'Animating...';
+
+                const timeouts = [];
+                const highlight = (el, delay) => timeouts.push(setTimeout(() => el.classList.add(el.id.includes('arrow') ? 'highlight-arrow' : 'highlight-box'), delay));
+                const updateText = (el, text, delay) => timeouts.push(setTimeout(() => el.textContent = text, delay));
+
+                // 1. Producer sends events
+                highlight(elements.producer, 500);
+                highlight(elements.arrow1, 1000);
+
+                // 2. Kafka lag builds up
+                highlight(elements.kafka, 1500);
+                updateText(elements.kafkaLag, 'Lag: 1000', 2000);
+                
+                // 3. KEDA detects lag
+                highlight(elements.arrow2, 2500);
+                highlight(elements.keda, 3000);
+
+                // 4. KEDA scales Dispatcher
+                updateText(elements.dispatcherReplicas, 'Replicas: 10', 3500);
+                highlight(elements.dispatcher, 3500);
+                
+                // 5. Dispatcher sends HTTP requests
+                highlight(elements.arrow3, 4000);
+
+                // 6. KPA detects requests
+                highlight(elements.kpa, 4500);
+                
+                // 7. KPA scales Service
+                updateText(elements.serviceReplicas, 'Replicas: 8', 5000);
+                highlight(elements.service, 5000);
+
+                // 8. Reset
+                timeouts.push(setTimeout(resetAnimation, 7000));
+            });
+
+            // --- Tuning Simulator Logic ---
+            const eventRateSlider = document.getElementById('eventRate');
+            const lagThresholdSlider = document.getElementById('lagThreshold');
+            const concurrencyTargetSlider = document.getElementById('concurrencyTarget');
+            const eventRateValue = document.getElementById('eventRateValue');
+            const lagThresholdValue = document.getElementById('lagThresholdValue');
+            const concurrencyTargetValue = document.getElementById('concurrencyTargetValue');
+
+            const createChart = (ctx, label) => {
+                return new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({ length: 30 }, (_, i) => i + 1),
+                        datasets: []
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true, suggestedMax: 10 }
+                        },
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        },
+                        animation: { duration: 250 }
+                    }
+                });
+            };
+            
+            const tier1ChartCtx = document.getElementById('tier1Chart').getContext('2d');
+            const tier2ChartCtx = document.getElementById('tier2Chart').getContext('2d');
+            const tier1Chart = createChart(tier1ChartCtx);
+            const tier2Chart = createChart(tier2ChartCtx);
+
+            const updateSimulator = () => {
+                const eventRate = parseInt(eventRateSlider.value);
+                const lagThreshold = parseInt(lagThresholdSlider.value);
+                const concurrencyTarget = parseInt(concurrencyTargetSlider.value);
+                const maxDispatchers = 10;
+                const maxServices = 20;
+
+                eventRateValue.textContent = eventRate;
+                lagThresholdValue.textContent = lagThreshold;
+                concurrencyTargetValue.textContent = concurrencyTarget;
+
+                let kafkaLag = 0;
+                let httpRate = 0;
+
+                const lagData = [];
+                const dispatcherData = [];
+                const httpRateData = [];
+                const serviceData = [];
+
+                for (let i = 0; i < 30; i++) {
+                    // Simulate a burst of events in the first 10 seconds
+                    if (i < 10) {
+                        kafkaLag += eventRate;
+                    }
+
+                    const desiredDispatchers = Math.ceil(kafkaLag / lagThreshold);
+                    const currentDispatchers = Math.min(maxDispatchers, desiredDispatchers);
+                    
+                    const consumptionRate = currentDispatchers * lagThreshold * 0.8; // a bit of inefficiency
+                    kafkaLag = Math.max(0, kafkaLag - consumptionRate);
+                    
+                    httpRate = currentDispatchers * concurrencyTarget * 1.5; // dispatchers push hard
+
+                    const desiredServices = Math.ceil(httpRate / concurrencyTarget);
+                    const currentServices = Math.min(maxServices, desiredServices);
+
+                    lagData.push(kafkaLag);
+                    dispatcherData.push(currentDispatchers);
+                    httpRateData.push(httpRate);
+                    serviceData.push(currentServices);
+                }
+
+                tier1Chart.data.datasets = [
+                    {
+                        label: 'Kafka Lag',
+                        data: lagData,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        fill: false,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Dispatcher Replicas',
+                        data: dispatcherData,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: false,
+                        yAxisID: 'y1'
+                    }
+                ];
+                
+                tier1Chart.options.scales = {
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Kafka Lag'} },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Replicas'}, grid: { drawOnChartArea: false }, suggestedMax: maxDispatchers + 2 }
+                };
+
+                tier2Chart.data.datasets = [
+                     {
+                        label: 'HTTP Request Rate',
+                        data: httpRateData,
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        fill: false,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Service Replicas',
+                        data: serviceData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: false,
+                        yAxisID: 'y1'
+                    }
+                ];
+                
+                tier2Chart.options.scales = {
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Request Rate'} },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Replicas'}, grid: { drawOnChartArea: false }, suggestedMax: maxServices + 2 }
+                };
+
+
+                tier1Chart.update();
+                tier2Chart.update();
+            };
+
+            [eventRateSlider, lagThresholdSlider, concurrencyTargetSlider].forEach(slider => {
+                slider.addEventListener('input', updateSimulator);
+            });
+            
+            updateSimulator();
+        });
+    </script>
+</body>
+</html>
