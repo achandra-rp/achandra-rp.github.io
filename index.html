@@ -1,14 +1,562 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud-Native Tech Hub</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e2e8f0;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 15, 35, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            color: #cbd5e1;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+        }
+
+        .hero-content h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { filter: brightness(1) drop-shadow(0 0 20px rgba(59, 130, 246, 0.3)); }
+            to { filter: brightness(1.2) drop-shadow(0 0 30px rgba(59, 130, 246, 0.5)); }
+        }
+
+        .hero-content p {
+            font-size: 1.25rem;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            color: white;
+            text-decoration: none;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Topics Section */
+        .topics {
+            padding: 5rem 0;
+            background: rgba(15, 15, 35, 0.3);
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .topics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .topic-card {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.5), rgba(51, 65, 85, 0.3));
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 1rem;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .topic-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4, #8b5cf6);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .topic-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .topic-card:hover::before {
+            opacity: 1;
+        }
+
+        .topic-icon {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .topic-card h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+
+        .topic-card p {
+            color: #94a3b8;
+            margin-bottom: 1.5rem;
+        }
+
+        .resource-links {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .resource-link {
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .resource-link:hover {
+            color: #06b6d4;
+            border-bottom-color: rgba(6, 182, 212, 0.3);
+            transform: translateX(5px);
+        }
+
+        /* Footer */
+        .footer {
+            background: rgba(15, 15, 35, 0.8);
+            border-top: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 3rem 0 2rem;
+            text-align: center;
+        }
+
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .social-link {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: white;
+            font-size: 1.25rem;
+            transition: all 0.3s ease;
+        }
+
+        .social-link:hover {
+            transform: translateY(-3px) scale(1.1);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            .topics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .hero-content h1 {
+                font-size: 2.5rem;
+            }
+        }
+
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 15, 35, 0.3);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            border-radius: 4px;
+        }
+
+        /* Animation for cards on scroll */
+        .topic-card {
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 0.8s ease forwards;
+        }
+
+        .topic-card:nth-child(1) { animation-delay: 0.1s; }
+        .topic-card:nth-child(2) { animation-delay: 0.2s; }
+        .topic-card:nth-child(3) { animation-delay: 0.3s; }
+        .topic-card:nth-child(4) { animation-delay: 0.4s; }
+        .topic-card:nth-child(5) { animation-delay: 0.5s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
 <body>
+    <!-- Header -->
+    <header class="header">
+        <nav class="nav container">
+            <div class="logo">CloudNative Hub</div>
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#topics">Topics</a></li>
+                <li><a href="#resources">Resources</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
 
-<h1>Hello World</h1>
-<p>I'm hosted with GitHub Pages.</p>
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content container">
+            <h1>Cloud-Native Technologies</h1>
+            <p>Explore the latest in cloud-native development, container orchestration, and modern infrastructure. Your gateway to Kubernetes, AWS, Linux, and cutting-edge DevOps practices.</p>
+            <a href="#topics" class="cta-button">Explore Topics</a>
+        </div>
+    </section>
 
-<a href="KEDA-on-Knative.html">View the KEDA on Knative Interactive Guide</a>
-  </br>
-<a href="interactive-guide-knative-Kafka-KEDA.html">Interactive Guide: Knative, Kafka & KEDA</a>
+    <!-- Topics Section -->
+    <section id="topics" class="topics">
+        <div class="container">
+            <h2 class="section-title">Technology Focus Areas</h2>
+            <div class="topics-grid">
+                <!-- Kubernetes Card -->
+                <div class="topic-card">
+                    <div class="topic-icon">⚙️</div>
+                    <h3>Kubernetes</h3>
+                    <p>Master container orchestration with Kubernetes. From basic concepts to advanced deployment strategies, networking, and cluster management.</p>
+                    <div class="resource-links">
+                        <a href="https://kubernetes.io/docs/" class="resource-link" target="_blank">Official Documentation</a>
+                        <a href="https://kubernetes.io/training/" class="resource-link" target="_blank">Training & Certification</a>
+                        <a href="https://github.com/kubernetes/kubernetes" class="resource-link" target="_blank">GitHub Repository</a>
+                        <a href="https://kubernetes.io/blog/" class="resource-link" target="_blank">Kubernetes Blog</a>
+                    </div>
+                </div>
 
+                <!-- Knative Card -->
+                <div class="topic-card">
+                    <div class="topic-icon">🚀</div>
+                    <h3>Knative</h3>
+                    <p>Serverless workloads on Kubernetes. Build, deploy, and manage modern serverless workloads with Knative Serving and Eventing.</p>
+                    <div class="resource-links">
+                        <a href="https://knative.dev/docs/" class="resource-link" target="_blank">Knative Documentation</a>
+                        <a href="https://knative.dev/docs/getting-started/" class="resource-link" target="_blank">Getting Started Guide</a>
+                        <a href="https://github.com/knative" class="resource-link" target="_blank">Knative on GitHub</a>
+                        <a href="https://knative.dev/blog/" class="resource-link" target="_blank">Knative Blog</a>
+                    </div>
+                </div>
 
+                <!-- AWS EKS Card -->
+                <div class="topic-card">
+                    <div class="topic-icon">☁️</div>
+                    <h3>Amazon EKS</h3>
+                    <p>Managed Kubernetes service on AWS. Learn to deploy, manage, and scale containerized applications using Amazon Elastic Kubernetes Service.</p>
+                    <div class="resource-links">
+                        <a href="https://docs.aws.amazon.com/eks/" class="resource-link" target="_blank">EKS Documentation</a>
+                        <a href="https://aws.amazon.com/eks/getting-started/" class="resource-link" target="_blank">EKS Getting Started</a>
+                        <a href="https://github.com/aws/amazon-eks-node-drainer" class="resource-link" target="_blank">EKS Tools on GitHub</a>
+                        <a href="https://aws.amazon.com/blogs/containers/" class="resource-link" target="_blank">AWS Container Blog</a>
+                    </div>
+                </div>
+
+                <!-- AWS Card -->
+                <div class="topic-card">
+                    <div class="topic-icon">🏗️</div>
+                    <h3>AWS Cloud</h3>
+                    <p>Amazon Web Services ecosystem. From EC2 and S3 to Lambda and CloudFormation. Master cloud infrastructure and services.</p>
+                    <div class="resource-links">
+                        <a href="https://docs.aws.amazon.com/" class="resource-link" target="_blank">AWS Documentation</a>
+                        <a href="https://aws.amazon.com/training/" class="resource-link" target="_blank">AWS Training</a>
+                        <a href="https://github.com/aws" class="resource-link" target="_blank">AWS on GitHub</a>
+                        <a href="https://aws.amazon.com/blogs/" class="resource-link" target="_blank">AWS Blog</a>
+                    </div>
+                </div>
+
+                <!-- Linux Card -->
+                <div class="topic-card">
+                    <div class="topic-icon">🐧</div>
+                    <h3>Linux</h3>
+                    <p>The foundation of modern infrastructure. System administration, shell scripting, containerization, and Linux best practices.</p>
+                    <div class="resource-links">
+                        <a href="https://www.kernel.org/" class="resource-link" target="_blank">Linux Kernel</a>
+                        <a href="https://linuxcommand.org/" class="resource-link" target="_blank">Linux Command Line</a>
+                        <a href="https://github.com/torvalds/linux" class="resource-link" target="_blank">Linux on GitHub</a>
+                        <a href="https://lwn.net/" class="resource-link" target="_blank">Linux Weekly News</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer id="contact" class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="https://github.com" class="social-link" target="_blank">📧</a>
+                <a href="https://linkedin.com" class="social-link" target="_blank">💼</a>
+                <a href="https://twitter.com" class="social-link" target="_blank">🐦</a>
+                <a href="https://github.com" class="social-link" target="_blank">💻</a>
+            </div>
+            <p>&copy; 2025 Cloud-Native Tech Hub. Sharing knowledge about modern cloud technologies.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Header scroll effect
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('.header');
+            if (window.scrollY > 100) {
+                header.style.background = 'rgba(15, 15, 35, 0.98)';
+                header.style.backdropFilter = 'blur(15px)';
+            } else {
+                header.style.background = 'rgba(15, 15, 35, 0.95)';
+                header.style.backdropFilter = 'blur(10px)';
+            }
+        });
+
+        // Intersection Observer for card animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.animationPlayState = 'running';
+                }
+            });
+        }, observerOptions);
+
+        // Observe all topic cards
+        document.querySelectorAll('.topic-card').forEach(card => {
+            card.style.animationPlayState = 'paused';
+            observer.observe(card);
+        });
+
+        // Add dynamic typing effect to hero title
+        const heroTitle = document.querySelector('.hero-content h1');
+        const originalText = heroTitle.textContent;
+        heroTitle.textContent = '';
+        
+        let i = 0;
+        const typeWriter = () => {
+            if (i < originalText.length) {
+                heroTitle.textContent += originalText.charAt(i);
+                i++;
+                setTimeout(typeWriter, 100);
+            }
+        };
+        
+        setTimeout(typeWriter, 1000);
+
+        // Add floating particles effect
+        function createParticle() {
+            const particle = document.createElement('div');
+            particle.style.position = 'fixed';
+            particle.style.width = '4px';
+            particle.style.height = '4px';
+            particle.style.background = '#3b82f6';
+            particle.style.borderRadius = '50%';
+            particle.style.pointerEvents = 'none';
+            particle.style.opacity = '0.6';
+            particle.style.left = Math.random() * window.innerWidth + 'px';
+            particle.style.top = window.innerHeight + 'px';
+            particle.style.zIndex = '1';
+            
+            document.body.appendChild(particle);
+            
+            const duration = Math.random() * 3000 + 2000;
+            const drift = (Math.random() - 0.5) * 200;
+            
+            particle.animate([
+                { transform: `translateY(0px) translateX(0px)`, opacity: 0.6 },
+                { transform: `translateY(-${window.innerHeight + 100}px) translateX(${drift}px)`, opacity: 0 }
+            ], {
+                duration: duration,
+                easing: 'linear'
+            }).onfinish = () => {
+                particle.remove();
+            };
+        }
+
+        // Create particles periodically
+        setInterval(createParticle, 300);
+
+        // Add click effects to cards
+        document.querySelectorAll('.topic-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                const ripple = document.createElement('div');
+                const rect = this.getBoundingClientRect();
+                const size = Math.max(rect.width, rect.height);
+                const x = e.clientX - rect.left - size / 2;
+                const y = e.clientY - rect.top - size / 2;
+                
+                ripple.style.width = ripple.style.height = size + 'px';
+                ripple.style.left = x + 'px';
+                ripple.style.top = y + 'px';
+                ripple.style.position = 'absolute';
+                ripple.style.background = 'rgba(59, 130, 246, 0.3)';
+                ripple.style.borderRadius = '50%';
+                ripple.style.transform = 'scale(0)';
+                ripple.style.pointerEvents = 'none';
+                
+                this.style.position = 'relative';
+                this.style.overflow = 'hidden';
+                this.appendChild(ripple);
+                
+                ripple.animate([
+                    { transform: 'scale(0)', opacity: 1 },
+                    { transform: 'scale(1)', opacity: 0 }
+                ], {
+                    duration: 600,
+                    easing: 'ease-out'
+                }).onfinish = () => {
+                    ripple.remove();
+                };
+            });
+        });
+    </script>
 </body>
 </html>
