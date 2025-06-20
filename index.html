@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloud-Native Tech Hub</title>
+    <title>My Cloud-Native Knowledge Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -12,100 +13,79 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-            color: #e2e8f0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             line-height: 1.6;
-            overflow-x: hidden;
+            color: #333;
+            background: #fff;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 900px;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 24px;
         }
 
         /* Header */
         .header {
+            border-bottom: 1px solid #e5e7eb;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
-            background: rgba(15, 15, 35, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(59, 130, 246, 0.2);
             z-index: 1000;
-            transition: all 0.3s ease;
         }
 
         .nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem 0;
+            padding: 16px 0;
         }
 
         .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
         }
 
         .nav-links {
             display: flex;
             list-style: none;
-            gap: 2rem;
+            gap: 32px;
         }
 
         .nav-links a {
-            color: #cbd5e1;
+            color: #6b7280;
             text-decoration: none;
-            font-weight: 500;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            transition: all 0.3s ease;
-            position: relative;
+            font-weight: 400;
+            font-size: 14px;
+            transition: color 0.2s ease;
         }
 
         .nav-links a:hover {
-            color: #3b82f6;
-            background: rgba(59, 130, 246, 0.1);
+            color: #111827;
         }
 
         /* Hero Section */
         .hero {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 120px 0 80px;
             text-align: center;
-            position: relative;
-            background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
         }
 
-        .hero-content h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
-            font-weight: 800;
-            margin-bottom: 1rem;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: glow 2s ease-in-out infinite alternate;
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 16px;
+            letter-spacing: -0.025em;
         }
 
-        @keyframes glow {
-            from { filter: brightness(1) drop-shadow(0 0 20px rgba(59, 130, 246, 0.3)); }
-            to { filter: brightness(1.2) drop-shadow(0 0 30px rgba(59, 130, 246, 0.5)); }
-        }
-
-        .hero-content p {
-            font-size: 1.25rem;
-            color: #94a3b8;
-            margin-bottom: 2rem;
+        .hero p {
+            font-size: 20px;
+            color: #6b7280;
+            margin-bottom: 32px;
             max-width: 600px;
             margin-left: auto;
             margin-right: auto;
@@ -113,155 +93,190 @@
 
         .cta-button {
             display: inline-block;
-            padding: 1rem 2rem;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            padding: 12px 24px;
+            background: #111827;
             color: white;
             text-decoration: none;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: background-color 0.2s ease;
         }
 
         .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 35px rgba(59, 130, 246, 0.4);
+            background: #374151;
         }
 
-        /* Topics Section */
-        .topics {
-            padding: 5rem 0;
-            background: rgba(15, 15, 35, 0.3);
+        /* Section Styles */
+        .section {
+            padding: 80px 0;
         }
 
         .section-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 48px;
             text-align: center;
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 3rem;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            letter-spacing: -0.025em;
         }
 
-        .topics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 2rem;
-            margin-top: 3rem;
+        /* About Section */
+        .about {
+            background: #f9fafb;
         }
 
-        .topic-card {
-            background: linear-gradient(145deg, rgba(30, 41, 59, 0.5), rgba(51, 65, 85, 0.3));
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 1rem;
-            padding: 2rem;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            position: relative;
-            overflow: hidden;
+        .about-content {
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
         }
 
-        .topic-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4, #8b5cf6);
-            opacity: 0;
-            transition: opacity 0.3s ease;
+        .about-content h3 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 16px;
         }
 
-        .topic-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(59, 130, 246, 0.2);
-            border-color: rgba(59, 130, 246, 0.4);
+        .about-content p {
+            font-size: 16px;
+            color: #6b7280;
+            margin-bottom: 32px;
         }
 
-        .topic-card:hover::before {
-            opacity: 1;
-        }
-
-        .topic-icon {
-            width: 60px;
-            height: 60px;
-            margin-bottom: 1rem;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4);
-            border-radius: 0.75rem;
+        .stats {
             display: flex;
-            align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
+            gap: 48px;
+            margin-top: 32px;
         }
 
-        .topic-card h3 {
-            font-size: 1.5rem;
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
             font-weight: 700;
-            margin-bottom: 1rem;
-            color: #f1f5f9;
+            color: #111827;
         }
 
-        .topic-card p {
-            color: #94a3b8;
-            margin-bottom: 1.5rem;
+        .stat-label {
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 4px;
         }
 
-        .resource-links {
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 32px;
+            margin-top: 48px;
+        }
+
+        /* Card Styles */
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 32px;
+            transition: box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-icon {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 20px;
+        }
+
+        .card-links {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 8px;
         }
 
-        .resource-link {
-            color: #3b82f6;
+        .card-link {
+            color: #4f46e5;
             text-decoration: none;
+            font-size: 14px;
             font-weight: 500;
-            padding: 0.5rem 0;
+            padding: 4px 0;
             border-bottom: 1px solid transparent;
-            transition: all 0.3s ease;
+            transition: border-color 0.2s ease;
         }
 
-        .resource-link:hover {
-            color: #06b6d4;
-            border-bottom-color: rgba(6, 182, 212, 0.3);
-            transform: translateX(5px);
+        .card-link:hover {
+            border-bottom-color: #4f46e5;
+        }
+
+        /* Tools Section */
+        .tools {
+            background: #f9fafb;
         }
 
         /* Footer */
         .footer {
-            background: rgba(15, 15, 35, 0.8);
-            border-top: 1px solid rgba(59, 130, 246, 0.2);
-            padding: 3rem 0 2rem;
+            border-top: 1px solid #e5e7eb;
+            padding: 48px 0 32px;
             text-align: center;
+            background: #f9fafb;
         }
 
         .social-links {
             display: flex;
             justify-content: center;
-            gap: 1rem;
-            margin-bottom: 2rem;
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .social-link {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(45deg, #3b82f6, #06b6d4);
+            width: 40px;
+            height: 40px;
+            background: #111827;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             text-decoration: none;
             color: white;
-            font-size: 1.25rem;
-            transition: all 0.3s ease;
+            font-size: 16px;
+            transition: background-color 0.2s ease;
         }
 
         .social-link:hover {
-            transform: translateY(-3px) scale(1.1);
-            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+            background: #374151;
+        }
+
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .footer a {
+            color: #4f46e5;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
         }
 
         /* Responsive Design */
@@ -269,13 +284,26 @@
             .nav-links {
                 display: none;
             }
-            
-            .topics-grid {
-                grid-template-columns: 1fr;
+
+            .hero h1 {
+                font-size: 36px;
             }
-            
-            .hero-content h1 {
-                font-size: 2.5rem;
+
+            .hero p {
+                font-size: 18px;
+            }
+
+            .stats {
+                flex-direction: column;
+                gap: 24px;
+            }
+
+            .section {
+                padding: 60px 0;
+            }
+
+            .section-title {
+                font-size: 28px;
             }
         }
 
@@ -283,51 +311,18 @@
         html {
             scroll-behavior: smooth;
         }
-
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: rgba(15, 15, 35, 0.3);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: linear-gradient(45deg, #3b82f6, #06b6d4);
-            border-radius: 4px;
-        }
-
-        /* Animation for cards on scroll */
-        .topic-card {
-            opacity: 0;
-            transform: translateY(30px);
-            animation: fadeInUp 0.8s ease forwards;
-        }
-
-        .topic-card:nth-child(1) { animation-delay: 0.1s; }
-        .topic-card:nth-child(2) { animation-delay: 0.2s; }
-        .topic-card:nth-child(3) { animation-delay: 0.3s; }
-        .topic-card:nth-child(4) { animation-delay: 0.4s; }
-        .topic-card:nth-child(5) { animation-delay: 0.5s; }
-
-        @keyframes fadeInUp {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
     </style>
 </head>
 <body>
     <!-- Header -->
     <header class="header">
         <nav class="nav container">
-            <div class="logo">Abhishek's CloudNative Hub</div>
+            <div class="logo">My Tech Notes</div>
             <ul class="nav-links">
                 <li><a href="#home">Home</a></li>
-                <li><a href="#topics">Topics</a></li>
-                <li><a href="#resources">Resources</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#topics">Tech Areas</a></li>
+                <li><a href="#tools">Tools</a></li>
                 <li><a href="#contact">Contact</a></li>
             </ul>
         </nav>
@@ -335,80 +330,142 @@
 
     <!-- Hero Section -->
     <section id="home" class="hero">
-        <div class="hero-content container">
-            <h1>My Cloud-Native Journey</h1>
+        <div class="container">
+            <h1>Abhishek's Cloud-Native Knowledge Hub</h1>
             <p>Welcome to my personal knowledge hub! Here I share my favorite resources, tools, and processes for cloud-native development. Everything our team needs to know about Kubernetes, AWS, Linux, and modern DevOps practices.</p>
-            <a href="#topics" class="cta-button">Explore Topics</a>
+            <a href="#about" class="cta-button">Learn More</a>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="section about">
+        <div class="container">
+            <h2 class="section-title">About Me</h2>
+            <div class="about-content">
+                <h3>Enterprise Platform Architect</h3>
+                <p>I've been working with cloud-native technologies for several years, specializing in Kubernetes, AWS, and DevOps practices. This site is my way of sharing the knowledge, tools, and processes that have made our team more effective.</p>
+            </div>
         </div>
     </section>
 
     <!-- Topics Section -->
-    <section id="topics" class="topics">
+    <section id="topics" class="section">
         <div class="container">
-            <h2 class="section-title">Technology Focus Areas</h2>
-            <div class="topics-grid">
-                <!-- Kubernetes Card -->
-                <div class="topic-card">
-                    <div class="topic-icon">⚙️</div>
+            <h2 class="section-title">Core Technologies</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-icon">⚙️</div>
                     <h3>Kubernetes</h3>
-                    <p>Master container orchestration with Kubernetes. From basic concepts to advanced deployment strategies, networking, and cluster management.</p>
-                    <div class="resource-links">
-                        <a href="https://kubernetes.io/docs/" class="resource-link" target="_blank">Official Documentation</a>
-                        <a href="https://kubernetes.io/training/" class="resource-link" target="_blank">Training & Certification</a>
-                        <a href="https://github.com/kubernetes/kubernetes" class="resource-link" target="_blank">GitHub Repository</a>
-                        <a href="https://kubernetes.io/blog/" class="resource-link" target="_blank">Kubernetes Blog</a>
+                    <p>My go-to orchestration platform. Resources that helped me master container orchestration.</p>
+                    <div class="card-links">
+                        <a href="https://kubernetes.io/docs/concepts/" class="card-link" target="_blank">Official Documentation</a>
+                        <a href="https://github.com/kelseyhightower/kubernetes-the-hard-way" class="card-link" target="_blank">Kubernetes The Hard Way</a>
+                        <a href="https://helm.sh/" class="card-link" target="_blank">Helm Package Manager</a>
+                        <a href="https://kustomize.io/" class="card-link" target="_blank">Kustomize</a>
                     </div>
                 </div>
 
-                <!-- Knative Card -->
-                <div class="topic-card">
-                    <div class="topic-icon">🚀</div>
+                <div class="card">
+                    <div class="card-icon">🚀</div>
                     <h3>Knative</h3>
-                    <p>Serverless workloads on Kubernetes. Build, deploy, and manage modern serverless workloads with Knative Serving and Eventing.</p>
-                    <div class="resource-links">
-                        <a href="https://knative.dev/docs/" class="resource-link" target="_blank">Knative Documentation</a>
-                        <a href="https://knative.dev/docs/getting-started/" class="resource-link" target="_blank">Getting Started Guide</a>
-                        <a href="https://github.com/knative" class="resource-link" target="_blank">Knative on GitHub</a>
-                        <a href="https://knative.dev/blog/" class="resource-link" target="_blank">Knative Blog</a>
+                    <p>My favorite serverless platform on Kubernetes for event-driven architectures.</p>
+                    <div class="card-links">
+                        <a href="https://knative.dev/docs/getting-started/" class="card-link" target="_blank">Getting Started Guide</a>
+                        <a href="https://knative.dev/docs/serving/" class="card-link" target="_blank">Knative Serving</a>
+                        <a href="https://knative.dev/docs/eventing/" class="card-link" target="_blank">Knative Eventing</a>
+                        <a href="https://github.com/knative/docs/tree/main/code-samples" class="card-link" target="_blank">Code Samples</a>
                     </div>
                 </div>
 
-                <!-- AWS EKS Card -->
-                <div class="topic-card">
-                    <div class="topic-icon">☁️</div>
+                <div class="card">
+                    <div class="card-icon">☁️</div>
                     <h3>Amazon EKS</h3>
-                    <p>Managed Kubernetes service on AWS. Learn to deploy, manage, and scale containerized applications using Amazon Elastic Kubernetes Service.</p>
-                    <div class="resource-links">
-                        <a href="https://docs.aws.amazon.com/eks/" class="resource-link" target="_blank">EKS Documentation</a>
-                        <a href="https://aws.amazon.com/eks/getting-started/" class="resource-link" target="_blank">EKS Getting Started</a>
-                        <a href="https://github.com/aws/amazon-eks-node-drainer" class="resource-link" target="_blank">EKS Tools on GitHub</a>
-                        <a href="https://aws.amazon.com/blogs/containers/" class="resource-link" target="_blank">AWS Container Blog</a>
+                    <p>My preferred managed Kubernetes service for production workloads.</p>
+                    <div class="card-links">
+                        <a href="https://eksctl.io/" class="card-link" target="_blank">eksctl</a>
+                        <a href="https://docs.aws.amazon.com/eks/latest/userguide/" class="card-link" target="_blank">EKS User Guide</a>
+                        <a href="https://github.com/aws/aws-load-balancer-controller" class="card-link" target="_blank">ALB Controller</a>
+                        <a href="https://aws.github.io/aws-eks-best-practices/" class="card-link" target="_blank">EKS Best Practices</a>
                     </div>
                 </div>
 
-                <!-- AWS Card -->
-                <div class="topic-card">
-                    <div class="topic-icon">🏗️</div>
+                <div class="card">
+                    <div class="card-icon">🏗️</div>
                     <h3>AWS Cloud</h3>
-                    <p>Amazon Web Services ecosystem. From EC2 and S3 to Lambda and CloudFormation. Master cloud infrastructure and services.</p>
-                    <div class="resource-links">
-                        <a href="https://docs.aws.amazon.com/" class="resource-link" target="_blank">AWS Documentation</a>
-                        <a href="https://aws.amazon.com/training/" class="resource-link" target="_blank">AWS Training</a>
-                        <a href="https://github.com/aws" class="resource-link" target="_blank">AWS on GitHub</a>
-                        <a href="https://aws.amazon.com/blogs/" class="resource-link" target="_blank">AWS Blog</a>
+                    <p>My daily cloud platform for building scalable applications.</p>
+                    <div class="card-links">
+                        <a href="https://aws.amazon.com/cli/" class="card-link" target="_blank">AWS CLI</a>
+                        <a href="https://docs.aws.amazon.com/cdk/" class="card-link" target="_blank">AWS CDK</a>
+                        <a href="https://docs.aws.amazon.com/lambda/" class="card-link" target="_blank">Lambda</a>
+                        <a href="https://docs.aws.amazon.com/wellarchitected/" class="card-link" target="_blank">Well-Architected Framework</a>
                     </div>
                 </div>
 
-                <!-- Linux Card -->
-                <div class="topic-card">
-                    <div class="topic-icon">🐧</div>
+                <div class="card">
+                    <div class="card-icon">🐧</div>
                     <h3>Linux</h3>
-                    <p>The foundation of modern infrastructure. System administration, shell scripting, containerization, and Linux best practices.</p>
-                    <div class="resource-links">
-                        <a href="https://www.kernel.org/" class="resource-link" target="_blank">Linux Kernel</a>
-                        <a href="https://linuxcommand.org/" class="resource-link" target="_blank">Linux Command Line</a>
-                        <a href="https://github.com/torvalds/linux" class="resource-link" target="_blank">Linux on GitHub</a>
-                        <a href="https://lwn.net/" class="resource-link" target="_blank">Linux Weekly News</a>
+                    <p>The foundation of everything I do. Essential Linux resources and tools.</p>
+                    <div class="card-links">
+                        <a href="https://linuxcommand.org/lc3_learning_the_shell.php" class="card-link" target="_blank">Learning the Shell</a>
+                        <a href="https://explainshell.com/" class="card-link" target="_blank">Explain Shell</a>
+                        <a href="https://github.com/jlevy/the-art-of-command-line" class="card-link" target="_blank">Art of Command Line</a>
+                        <a href="https://www.vim.org/" class="card-link" target="_blank">Vim</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tools Section -->
+    <section id="tools" class="section tools">
+        <div class="container">
+            <h2 class="section-title">Essential Tools</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-icon">💻</div>
+                    <h3>Development</h3>
+                    <p>My daily development tools and environment.</p>
+                    <div class="card-links">
+                        <a href="https://code.visualstudio.com/" class="card-link" target="_blank">VS Code</a>
+                        <a href="https://www.docker.com/products/docker-desktop" class="card-link" target="_blank">Docker Desktop</a>
+                        <a href="https://github.com/cli/cli" class="card-link" target="_blank">GitHub CLI</a>
+                        <a href="https://www.postman.com/" class="card-link" target="_blank">Postman</a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">⚡</div>
+                    <h3>Command Line</h3>
+                    <p>CLI tools that boost my productivity every day.</p>
+                    <div class="card-links">
+                        <a href="https://github.com/junegunn/fzf" class="card-link" target="_blank">fzf</a>
+                        <a href="https://github.com/BurntSushi/ripgrep" class="card-link" target="_blank">ripgrep</a>
+                        <a href="https://github.com/sharkdp/bat" class="card-link" target="_blank">bat</a>
+                        <a href="https://k9scli.io/" class="card-link" target="_blank">k9s</a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">📊</div>
+                    <h3>Monitoring</h3>
+                    <p>Tools for observability and system health.</p>
+                    <div class="card-links">
+                        <a href="https://prometheus.io/" class="card-link" target="_blank">Prometheus</a>
+                        <a href="https://grafana.com/" class="card-link" target="_blank">Grafana</a>
+                        <a href="https://www.jaegertracing.io/" class="card-link" target="_blank">Jaeger</a>
+                        <a href="https://www.elastic.co/elk-stack" class="card-link" target="_blank">ELK Stack</a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">🔒</div>
+                    <h3>Security</h3>
+                    <p>Tools that help keep our infrastructure secure.</p>
+                    <div class="card-links">
+                        <a href="https://www.vaultproject.io/" class="card-link" target="_blank">HashiCorp Vault</a>
+                        <a href="https://github.com/aquasecurity/trivy" class="card-link" target="_blank">Trivy</a>
+                        <a href="https://falco.org/" class="card-link" target="_blank">Falco</a>
+                        <a href="https://www.open-policy-agent.org/" class="card-link" target="_blank">Open Policy Agent</a>
                     </div>
                 </div>
             </div>
@@ -419,11 +476,14 @@
     <footer id="contact" class="footer">
         <div class="container">
             <div class="social-links">
-                <a href="https://github.com/achandra-rp" class="social-link" target="_blank">📧</a>
-                <a href="https://www.linkedin.com/in/abhishekchandra/" class="social-link" target="_blank">💼</a>
-                <a href="https://github.com/abhichandra21/" class="social-link" target="_blank">💻</a>
+                <a href="mailto:your.email@company.com" class="social-link">📧</a>
+                <a href="https://linkedin.com/in/yourprofile" class="social-link">💼</a>
+                <a href="https://github.com/yourusername" class="social-link">💻</a>
             </div>
-            <p>&copy; 2025 Cloud-Native Tech Hub. Sharing knowledge about modern cloud technologies.</p>
+            <p>&copy; 2025 [Your Name] - Sharing knowledge to build better systems together.</p>
+            <p style="margin-top: 12px;">
+                <a href="https://github.com/yourusername/knowledge-hub">Contribute to this knowledge hub</a>
+            </p>
         </div>
     </footer>
 
@@ -442,119 +502,14 @@
             });
         });
 
-        // Header scroll effect
+        // Simple header scroll effect
         window.addEventListener('scroll', () => {
             const header = document.querySelector('.header');
-            if (window.scrollY > 100) {
-                header.style.background = 'rgba(15, 15, 35, 0.98)';
-                header.style.backdropFilter = 'blur(15px)';
+            if (window.scrollY > 50) {
+                header.style.borderBottom = '1px solid #d1d5db';
             } else {
-                header.style.background = 'rgba(15, 15, 35, 0.95)';
-                header.style.backdropFilter = 'blur(10px)';
+                header.style.borderBottom = '1px solid #e5e7eb';
             }
-        });
-
-        // Intersection Observer for card animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.animationPlayState = 'running';
-                }
-            });
-        }, observerOptions);
-
-        // Observe all topic cards
-        document.querySelectorAll('.topic-card').forEach(card => {
-            card.style.animationPlayState = 'paused';
-            observer.observe(card);
-        });
-
-        // Add dynamic typing effect to hero title
-        const heroTitle = document.querySelector('.hero-content h1');
-        const originalText = heroTitle.textContent;
-        heroTitle.textContent = '';
-        
-        let i = 0;
-        const typeWriter = () => {
-            if (i < originalText.length) {
-                heroTitle.textContent += originalText.charAt(i);
-                i++;
-                setTimeout(typeWriter, 100);
-            }
-        };
-        
-        setTimeout(typeWriter, 1000);
-
-        // Add floating particles effect
-        function createParticle() {
-            const particle = document.createElement('div');
-            particle.style.position = 'fixed';
-            particle.style.width = '4px';
-            particle.style.height = '4px';
-            particle.style.background = '#3b82f6';
-            particle.style.borderRadius = '50%';
-            particle.style.pointerEvents = 'none';
-            particle.style.opacity = '0.6';
-            particle.style.left = Math.random() * window.innerWidth + 'px';
-            particle.style.top = window.innerHeight + 'px';
-            particle.style.zIndex = '1';
-            
-            document.body.appendChild(particle);
-            
-            const duration = Math.random() * 3000 + 2000;
-            const drift = (Math.random() - 0.5) * 200;
-            
-            particle.animate([
-                { transform: `translateY(0px) translateX(0px)`, opacity: 0.6 },
-                { transform: `translateY(-${window.innerHeight + 100}px) translateX(${drift}px)`, opacity: 0 }
-            ], {
-                duration: duration,
-                easing: 'linear'
-            }).onfinish = () => {
-                particle.remove();
-            };
-        }
-
-        // Create particles periodically
-        setInterval(createParticle, 300);
-
-        // Add click effects to cards
-        document.querySelectorAll('.topic-card').forEach(card => {
-            card.addEventListener('click', function(e) {
-                const ripple = document.createElement('div');
-                const rect = this.getBoundingClientRect();
-                const size = Math.max(rect.width, rect.height);
-                const x = e.clientX - rect.left - size / 2;
-                const y = e.clientY - rect.top - size / 2;
-                
-                ripple.style.width = ripple.style.height = size + 'px';
-                ripple.style.left = x + 'px';
-                ripple.style.top = y + 'px';
-                ripple.style.position = 'absolute';
-                ripple.style.background = 'rgba(59, 130, 246, 0.3)';
-                ripple.style.borderRadius = '50%';
-                ripple.style.transform = 'scale(0)';
-                ripple.style.pointerEvents = 'none';
-                
-                this.style.position = 'relative';
-                this.style.overflow = 'hidden';
-                this.appendChild(ripple);
-                
-                ripple.animate([
-                    { transform: 'scale(0)', opacity: 1 },
-                    { transform: 'scale(1)', opacity: 0 }
-                ], {
-                    duration: 600,
-                    easing: 'ease-out'
-                }).onfinish = () => {
-                    ripple.remove();
-                };
-            });
         });
     </script>
 </body>
