@@ -26,8 +26,11 @@ kubectl version --client --short
 jq --version
 aws --version
 
+# Install awscurl for querying AMP (required for testing)
+pip install awscurl
+
 # Check AMP workspace exists
-aws aps describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
+aws amp describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
 
 # Verify Knative components
 kubectl get pods -n knative-serving
@@ -512,13 +515,25 @@ echo "=== Health check complete ==="
 
 ## 7 End-to-End Pipeline Testing
 
-### 7.1 Port-Forward Prometheus Agent
+### 7.1 Install awscurl (Required for AMP Querying)
+```bash
+# Install awscurl for querying AMP
+pip install awscurl
+
+# Alternative: Use Docker if you don't want to install Python dependencies
+docker pull okigan/awscurl
+
+# Test awscurl installation
+awscurl --version
+```
+
+### 7.2 Port-Forward Prometheus Agent
 ```bash
 # Port-forward Prometheus agent for testing
 kubectl -n monitoring port-forward deploy/amp-agent-kube-prometheus-prometheus 9090:9090 &
 ```
 
-### 7.2 Verify Metrics Collection
+### 7.3 Verify Metrics Collection
 ```bash
 # Check that kafka-exporter metrics are collected by Prometheus
 echo "Testing kafka-exporter metrics collection..."
@@ -536,7 +551,7 @@ curl -sG 'http://localhost:9090/api/v1/label/__name__/values' \
      --data-urlencode 'match[]={job=~".*knative.*"}' | jq -r '.data[]' | head -5
 ```
 
-### 7.3 Verify Remote Write Queue Health
+### 7.4 Verify Remote Write Queue Health
 ```bash
 # Check samples being queued for remote write
 echo "Checking remote write queue..."
@@ -554,19 +569,59 @@ curl -sG 'http://localhost:9090/api/v1/query' \
      --data-urlencode 'query=prometheus_remote_storage_failed_samples_total' | jq '.data.result'
 ```
 
-### 7.4 Test AMP Data Reception
+### 7.5 Test AMP Data Reception
 ```bash
-# Query AMP directly for kafka metrics
+# First, get the workspace endpoint
+WORKSPACE_ID="ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
+AWS_REGION="us-east-1"
+
+# Get the query endpoint URL
+QUERY_ENDPOINT=$(aws amp describe-workspace \
+    --workspace-id $WORKSPACE_ID \
+    --region $AWS_REGION \
+    --query 'workspace.prometheusEndpoint' \
+    --output text)
+
+echo "Workspace endpoint: $QUERY_ENDPOINT"
+
+# Query AMP directly for kafka metrics using awscurl
 echo "Querying AMP directly for kafka metrics..."
-aws --region us-east-1 aps query \
-    --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 \
-    --query-string 'count(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"})'
+awscurl -X POST --region $AWS_REGION \
+    --service aps \
+    "${QUERY_ENDPOINT}api/v1/query" \
+    -d 'query=count(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"})' \
+    --header 'Content-Type: application/x-www-form-urlencoded'
 
 # Query for Knative metrics
 echo "Querying AMP for Knative metrics..."
-aws --region us-east-1 aps query \
-    --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 \
-    --query-string 'count({cluster="d-use1-rp-eks-srsc-st-01", __name__=~"knative_.*"})'
+awscurl -X POST --region $AWS_REGION \
+    --service aps \
+    "${QUERY_ENDPOINT}api/v1/query" \
+    -d 'query=count({cluster="d-use1-rp-eks-srsc-st-01", __name__=~"knative_.*"})' \
+    --header 'Content-Type: application/x-www-form-urlencoded'
+
+# Alternative: Using Docker for awscurl (if you don't want to install Python dependencies)
+export WORKSPACE_ID="ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
+export AWS_REGION="us-east-1"
+
+# Get the query endpoint URL
+QUERY_ENDPOINT=$(aws amp describe-workspace \
+    --workspace-id $WORKSPACE_ID \
+    --region $AWS_REGION \
+    --query 'workspace.prometheusEndpoint' \
+    --output text)
+
+# Query using Docker
+docker run --rm -it \
+    -e AWS_ACCESS_KEY_ID \
+    -e AWS_SECRET_ACCESS_KEY \
+    -e AWS_SESSION_TOKEN \
+    okigan/awscurl \
+    --region $AWS_REGION \
+    --service aps \
+    "${QUERY_ENDPOINT}api/v1/query" \
+    -d 'query=up{cluster="d-use1-rp-eks-srsc-st-01"}' \
+    --header 'Content-Type: application/x-www-form-urlencoded'
 ```
 
 ---
@@ -715,10 +770,20 @@ echo "=== Weekly Metrics Pipeline Health Check ==="
 kubectl get pods -n monitoring | grep -E "prometheus|kafka-exporter"
 
 # Check AMP workspace
-aws aps describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
+aws amp describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
 
-# Test end-to-end flow
-aws aps query --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --query-string 'up{cluster="d-use1-rp-eks-srsc-st-01"}' --region us-east-1
+# Test end-to-end flow with awscurl
+QUERY_ENDPOINT=$(aws amp describe-workspace \
+    --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 \
+    --region us-east-1 \
+    --query 'workspace.prometheusEndpoint' \
+    --output text)
+
+awscurl -X POST --region us-east-1 \
+    --service aps \
+    "${QUERY_ENDPOINT}api/v1/query" \
+    -d 'query=up{cluster="d-use1-rp-eks-srsc-st-01"}' \
+    --header 'Content-Type: application/x-www-form-urlencoded'
 ```
 
 ### 10.2 Alerting Rules
