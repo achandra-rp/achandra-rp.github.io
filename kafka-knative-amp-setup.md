@@ -1,43 +1,64 @@
 # End-to-End Installation & Validation Guide
 
-Prometheus Agent → Amazon Managed Prometheus (AMP) → Grafana Dashboards for Knative & Kafka
+*Complete setup and testing for Prometheus Agent → Amazon Managed Prometheus (AMP) → Grafana dashboards for Knative & Kafka*
 
 ---
 
-## 1. Prerequisites
+## 1 Prerequisites & Environment Validation
 
-* An EKS cluster (≥ 1.24) with OIDC provider enabled.
-* Tools installed on your workstation:
+### 1.1 Required Components
+* **EKS cluster** (≥ 1.24) with OIDC provider enabled
+* **Command line tools**: `helm` ≥ 3.10, `kubectl`, `jq`, and AWS CLI v2
+* **AWS Resources**: 
+  - AMP workspace (e.g., `ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363`)
+  - Grafana instance with AMP integration
+* **Kafka cluster**: MSK, Strimzi, or other Kafka deployment reachable from EKS nodes
+* **Knative**: Serving and/or Eventing components installed
 
-  * `helm` (≥ 3.10)
-  * `kubectl`
-  * `jq`
-  * AWS CLI v2
-* An Amazon Managed Prometheus (AMP) workspace ID (e.g., `ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363`).
-* Kafka cluster accessible from EKS nodes (e.g., MSK or Strimzi).
-* Namespace `monitoring` (this guide creates it if missing).
+### 1.2 Validate Prerequisites
+```bash
+# Check EKS cluster and OIDC
+aws eks describe-cluster --name <your-cluster-name> --query 'cluster.identity.oidc.issuer'
 
----
+# Verify command line tools
+helm version --short
+kubectl version --client --short
+jq --version
+aws --version
 
-## 2. Set up IAM Role for Service Account (IRSA)
+# Check AMP workspace exists
+aws aps describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
 
-Create the following Kubernetes service account (`amp-iamproxy-ingest.yaml`):
+# Verify Knative components
+kubectl get pods -n knative-serving
+kubectl get pods -n knative-eventing
 
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: amp-iamproxy-ingest
-  namespace: monitoring
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/EKS-AMP-Ingest
+# Check Kafka accessibility (replace with your Kafka endpoints)
+kubectl run kafka-test --rm -it --restart=Never --image=confluentinc/cp-kafka:latest -- \
+  kafka-topics --bootstrap-server <your-kafka-broker>:9092 --list
 ```
 
-### IAM Role Policy
+---
 
-Attach the following policy to the IAM role (`EKS-AMP-Ingest`):
+## 2 Create IRSA Role for AMP Integration
 
-```json
+### 2.1 Gather Required Information
+```bash
+# Get your AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Get your EKS cluster's OIDC issuer
+OIDC_ISSUER=$(aws eks describe-cluster --name <your-cluster-name> --query 'cluster.identity.oidc.issuer' --output text)
+OIDC_ID=$(echo $OIDC_ISSUER | cut -d'/' -f5)
+
+echo "Account ID: $AWS_ACCOUNT_ID"
+echo "OIDC ID: $OIDC_ID"
+```
+
+### 2.2 Create IAM Role and Policy
+```bash
+# Create the IAM policy
+cat > amp-ingest-policy.json << EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -49,136 +70,687 @@ Attach the following policy to the IAM role (`EKS-AMP-Ingest`):
         "aps:GetLabels",
         "aps:GetMetricMetadata"
       ],
-      "Resource": "arn:aws:aps:*:*:workspace/ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
+      "Resource": "arn:aws:aps:us-east-1:$AWS_ACCOUNT_ID:workspace/ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
     }
   ]
 }
-```
+EOF
 
-### Trust Relationship Policy
+aws iam create-policy --policy-name EKS-AMP-Ingest-Policy --policy-document file://amp-ingest-policy.json
 
-Define trust relationship with EKS OIDC provider:
-
-```json
+# Create the trust policy
+cat > amp-trust-policy.json << EOF
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/oidc.eks.<region>.amazonaws.com/id/<OIDC_ID>"
+        "Federated": "arn:aws:iam::$AWS_ACCOUNT_ID:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/$OIDC_ID"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "oidc.eks.<region>.amazonaws.com/id/<OIDC_ID>:sub": "system:serviceaccount:monitoring:amp-iamproxy-ingest"
+          "oidc.eks.us-east-1.amazonaws.com/id/$OIDC_ID:sub": "system:serviceaccount:monitoring:amp-iamproxy-ingest"
         }
       }
     }
   ]
 }
+EOF
+
+# Create the IAM role
+aws iam create-role --role-name EKS-AMP-Ingest --assume-role-policy-document file://amp-trust-policy.json
+
+# Attach the policy to the role
+aws iam attach-role-policy --role-name EKS-AMP-Ingest --policy-arn arn:aws:iam::$AWS_ACCOUNT_ID:policy/EKS-AMP-Ingest-Policy
 ```
 
-Apply the manifest and IAM policies.
-
----
-
-## 3. Install Prometheus Agent with Helm
-
-(Refer to original Helm installation steps provided earlier in the guide.)
-
----
-
-## 4. Import Knative ServiceMonitors
-
+### 2.3 Create ServiceAccount
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/knative-extensions/monitoring/main/servicemonitor.yaml
+# Create the monitoring namespace
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+# Create the ServiceAccount with IRSA annotation
+cat > amp-serviceaccount.yaml << EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: amp-iamproxy-ingest
+  namespace: monitoring
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::$AWS_ACCOUNT_ID:role/EKS-AMP-Ingest
+EOF
+
+kubectl apply -f amp-serviceaccount.yaml
 ```
 
-Modify namespaces if Knative runs in custom ones.
+### 2.4 Validate IRSA Setup
+```bash
+# Check ServiceAccount annotation
+kubectl get sa amp-iamproxy-ingest -n monitoring -o yaml
+
+# Test role assumption (should show assumed role ARN)
+kubectl run irsa-test --rm -it --restart=Never --serviceaccount=amp-iamproxy-ingest --namespace=monitoring --image=amazon/aws-cli:latest -- \
+  sts get-caller-identity
+```
 
 ---
 
-## 5. Deploy Kafka Exporter and ServiceMonitor
+## 3 Install Prometheus Agent with Helm
 
-Apply provided Kafka Exporter manifest (`kafka-exporter.yaml`).
+### 3.1 Add Helm Repository
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
 
-### Verify Kafka Exporter Installation
+### 3.2 Install Prometheus Agent
+```bash
+# Replace these values with your actual cluster name and workspace ID
+CLUSTER_NAME="d-use1-rp-eks-srsc-st-01"
+WORKSPACE_ID="ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
+AWS_REGION="us-east-1"
 
-* Check Kafka Exporter Pod Status:
+helm upgrade --install amp-agent prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --set prometheus.serviceAccount.create=false \
+  --set prometheus.serviceAccount.name=amp-iamproxy-ingest \
+  --set prometheus.prometheusSpec.serviceAccountName=amp-iamproxy-ingest \
+  --set prometheus.prometheusSpec.mode=agent \
+  --set prometheus.prometheusSpec.enableRemoteWriteReceiver=false \
+  --set prometheus.prometheusSpec.externalLabels.cluster=$CLUSTER_NAME \
+  --set-string "prometheus.prometheusSpec.remoteWrite[0].url=https://aps-workspaces.$AWS_REGION.amazonaws.com/workspaces/$WORKSPACE_ID/api/v1/remote_write" \
+  --set "prometheus.prometheusSpec.remoteWrite[0].sigv4.region=$AWS_REGION" \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+  --set-json prometheus.prometheusSpec.serviceMonitorSelector='{}' \
+  --set-json prometheus.prometheusSpec.serviceMonitorNamespaceSelector='{}' \
+  --set prometheusOperator.serviceMonitor.selfNamespace=true \
+  --set prometheus.prometheusSpec.scrapeInterval=30s \
+  --set 'prometheus.prometheusSpec.remoteWrite[0].queueConfig.maxSamplesPerSend=1000' \
+  --set 'prometheus.prometheusSpec.remoteWrite[0].queueConfig.batchSendDeadline=30s' \
+  --set 'prometheus.prometheusSpec.remoteWrite[0].queueConfig.maxShards=200' \
+  --set 'prometheus.prometheusSpec.remoteWrite[0].queueConfig.capacity=5000'
+```
 
-  ```bash
-  kubectl -n monitoring get pods -l app=kafka-exporter
-  ```
+### 3.3 Verify Prometheus Agent Installation
+```bash
+# Check if pods are running
+kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus
 
-* Check Metrics Endpoint:
+# Check agent logs (look for successful startup)
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus --tail=20
 
-  ```bash
-  kubectl -n monitoring port-forward svc/kafka-exporter 9308
-  curl localhost:9308/metrics | grep kafka
-  ```
-
-* View available metrics exposed by Kafka Exporter:
-
-  ```bash
-  curl -sG 'http://localhost:9090/api/v1/label/__name__/values' --data-urlencode 'match[]={job="kafka-exporter"}' | jq -r '.data[]'
-  ```
-
-You can also inspect available metrics through the Kafka Exporter's web page by port-forwarding and accessing it via your browser.
-
----
-
-## 6. Smoke-Test the Pipeline
-
-Follow the detailed smoke-testing steps provided in the original documentation to:
-
-1. Port-forward the Prometheus agent.
-2. Validate Kafka Exporter metrics in Prometheus.
-3. Verify metrics queued for remote-write.
-4. Confirm metrics sent to AMP.
-5. Query AMP directly.
-
----
-
-## 7. Integrate Grafana with AMP
-
-* Configure Grafana Data Source:
-
-  * Type: Amazon Managed Prometheus
-  * Workspace ID and region: match AMP
-  * Auth: SigV4
-* Confirm connection with **Save & Test**.
-* Use Grafana Explore to test queries such as:
-
-  ```promql
-  kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}
-  ```
+# Verify ServiceAccount is being used
+kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus -o yaml | grep -A2 -B2 serviceAccount
+```
 
 ---
 
-## 8. Troubleshooting Commands
+## 4 Deploy Knative ServiceMonitors
 
-* Check ServiceMonitors:
+### 4.1 Install Knative Monitoring Components
+```bash
+# Install Knative monitoring ServiceMonitors
+kubectl apply -f https://raw.githubusercontent.com/knative-extensions/monitoring/main/servicemonitor.yaml
 
-  ```bash
-  kubectl get servicemonitor -A
-  ```
+# Verify ServiceMonitors were created
+kubectl get servicemonitor -A | grep knative
+```
 
-* Inspect Prometheus Remote Queue:
+### 4.2 Validate Knative Metrics Endpoints
+```bash
+# Check if Knative pods expose metrics
+kubectl get pods -n knative-serving -o wide
+kubectl get pods -n knative-eventing -o wide
 
-  ```bash
-  curl -sG 'http://localhost:9090/api/v1/query' \
-       --data-urlencode 'query=prometheus_remote_storage_pending_samples' | jq '.data.result'
-  ```
+# Test metrics endpoint on a Knative pod (replace POD_NAME)
+kubectl exec -n knative-serving <POD_NAME> -- curl -s localhost:9090/metrics | head -10
 
-* Inspect operator logs for config errors:
+# Or port-forward to test locally
+kubectl port-forward -n knative-serving <POD_NAME> 9090:9090 &
+curl -s localhost:9090/metrics | grep -E "knative_|serving_|eventing_" | head -5
+```
 
-  ```bash
-  kubectl -n monitoring logs deploy/amp-agent-kube-prometheus-operator | grep -i error
-  ```
+---
 
-* AMP reachability test:
+## 5 Deploy kafka-exporter and ServiceMonitor
 
-  ```bash
-  kubectl run netcheck --rm -it --restart=Never --image=curlimages/curl -- curl -s -o /dev/null -w '%{http_code}\n' https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363/api/v1/status
-  ```
+### 5.1 Create Kafka Credentials Secret
+```bash
+# Create secret for Kafka authentication (adjust based on your setup)
+kubectl create secret generic kafka-secret \
+  --from-literal=user=<your-kafka-username> \
+  --from-literal=password=<your-kafka-password> \
+  --namespace=monitoring
+
+# For MSK with IAM authentication, you might not need username/password
+# Instead, use IAM roles for service accounts
+```
+
+### 5.2 Deploy kafka-exporter
+```yaml
+# kafka-exporter.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  namespace: monitoring
+  labels: 
+    app: kafka-exporter
+    component: metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      app: kafka-exporter
+  template:
+    metadata:
+      labels: 
+        app: kafka-exporter
+        component: metrics
+    spec:
+      containers:
+      - name: kafka-exporter
+        image: danielqsj/kafka-exporter:v1.7.0  # Use specific version
+        args:
+          # Replace with your actual Kafka broker endpoints
+          - '--kafka.server=b-1.example.kafka.amazonaws.com:9096'
+          - '--kafka.server=b-2.example.kafka.amazonaws.com:9096'
+          - '--kafka.server=b-3.example.kafka.amazonaws.com:9096'
+          - '--sasl.enabled'
+          - '--sasl.username=$(KAFKA_USERNAME)'
+          - '--sasl.password=$(KAFKA_PASSWORD)'
+          - '--sasl.mechanism=scram-sha512'
+          - '--tls.enabled'
+          - '--tls.insecure-skip-tls-verify'
+          - '--kafka.version=3.5.1'
+          - '--web.listen-address=:9308'
+          - '--log.level=info'
+        env:
+          - name: KAFKA_USERNAME
+            valueFrom: 
+              secretKeyRef: 
+                name: kafka-secret
+                key: user
+          - name: KAFKA_PASSWORD
+            valueFrom: 
+              secretKeyRef: 
+                name: kafka-secret
+                key: password
+        ports:
+          - name: metrics
+            containerPort: 9308
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9308
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9308
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter
+  namespace: monitoring
+  labels: 
+    app: kafka-exporter
+    component: metrics
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9308
+      targetPort: 9308
+      protocol: TCP
+  selector:
+    app: kafka-exporter
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kafka-exporter
+  namespace: monitoring
+  labels:
+    app: kafka-exporter
+    component: metrics
+spec:
+  selector:
+    matchLabels:
+      app: kafka-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+  namespaceSelector:
+    matchNames:
+      - monitoring
+```
+
+### 5.3 Apply kafka-exporter Configuration
+```bash
+# Apply the complete kafka-exporter setup
+kubectl apply -f kafka-exporter.yaml
+
+# Check deployment status
+kubectl get deployment kafka-exporter -n monitoring
+kubectl get pods -n monitoring -l app=kafka-exporter
+
+# Check service and endpoints
+kubectl get svc kafka-exporter -n monitoring
+kubectl get endpoints kafka-exporter -n monitoring
+```
+
+---
+
+## 6 Comprehensive kafka-exporter Testing
+
+### 6.1 Basic Connectivity Tests
+```bash
+# Check if kafka-exporter pod is running
+kubectl get pods -n monitoring -l app=kafka-exporter -o wide
+
+# Check pod logs for any errors
+kubectl logs -n monitoring -l app=kafka-exporter --tail=20
+
+# Test if the metrics endpoint is accessible
+kubectl exec -n monitoring -l app=kafka-exporter -- curl -s localhost:9308/metrics | head -10
+```
+
+### 6.2 Port-Forward and Web Interface Testing
+```bash
+# Port-forward to access kafka-exporter web interface
+kubectl port-forward -n monitoring svc/kafka-exporter 9308:9308 &
+
+# Test metrics endpoint locally
+curl -s localhost:9308/metrics | head -20
+
+# Access the web interface (open in browser)
+echo "Open http://localhost:9308 in your browser to see kafka-exporter web interface"
+
+# Test specific metric queries
+curl -s localhost:9308/metrics | grep -E "kafka_brokers|kafka_topic_partitions|kafka_consumergroup_lag"
+
+# Check for specific Kafka metrics
+curl -s localhost:9308/metrics | grep -c "kafka_" 
+echo "Total kafka metrics found: $(curl -s localhost:9308/metrics | grep -c "kafka_")"
+```
+
+### 6.3 Kafka Connection Validation
+```bash
+# Check if kafka-exporter can connect to Kafka brokers
+kubectl logs -n monitoring -l app=kafka-exporter | grep -E "connecting|connected|error|failed"
+
+# Look for successful broker connections
+kubectl logs -n monitoring -l app=kafka-exporter | grep -i "broker"
+
+# Check for authentication success
+kubectl logs -n monitoring -l app=kafka-exporter | grep -i "auth"
+```
+
+### 6.4 Metrics Quality Tests
+```bash
+# Test for essential Kafka metrics
+METRICS_ENDPOINT="localhost:9308"
+
+echo "Testing essential Kafka metrics..."
+
+# Broker metrics
+echo "Broker metrics:"
+curl -s http://$METRICS_ENDPOINT/metrics | grep "kafka_brokers{" | head -3
+
+# Topic metrics
+echo "Topic metrics:"
+curl -s http://$METRICS_ENDPOINT/metrics | grep "kafka_topic_partitions{" | head -3
+
+# Consumer group lag (critical for monitoring)
+echo "Consumer group lag metrics:"
+curl -s http://$METRICS_ENDPOINT/metrics | grep "kafka_consumergroup_lag{" | head -3
+
+# Partition metrics
+echo "Partition metrics:"
+curl -s http://$METRICS_ENDPOINT/metrics | grep "kafka_partition_" | head -3
+
+# Count total metrics
+echo "Total metrics exposed:"
+curl -s http://$METRICS_ENDPOINT/metrics | grep -E "^kafka_" | wc -l
+```
+
+### 6.5 ServiceMonitor Discovery Test
+```bash
+# Check if Prometheus can discover kafka-exporter ServiceMonitor
+kubectl get servicemonitor kafka-exporter -n monitoring -o yaml
+
+# Verify labels match between service and ServiceMonitor
+kubectl get svc kafka-exporter -n monitoring -o yaml | grep -A5 "labels:"
+kubectl get servicemonitor kafka-exporter -n monitoring -o yaml | grep -A5 "matchLabels:"
+```
+
+### 6.6 kafka-exporter Health Check Script
+```bash
+#!/bin/bash
+# kafka-exporter-health-check.sh
+
+NAMESPACE="monitoring"
+SERVICE_NAME="kafka-exporter"
+METRICS_PORT="9308"
+
+echo "=== kafka-exporter Health Check ==="
+
+# Check pod status
+echo "1. Checking pod status..."
+POD_STATUS=$(kubectl get pods -n $NAMESPACE -l app=$SERVICE_NAME -o jsonpath='{.items[0].status.phase}')
+if [ "$POD_STATUS" = "Running" ]; then
+    echo "✓ Pod is running"
+else
+    echo "✗ Pod is not running: $POD_STATUS"
+    exit 1
+fi
+
+# Check service endpoints
+echo "2. Checking service endpoints..."
+ENDPOINTS=$(kubectl get endpoints $SERVICE_NAME -n $NAMESPACE -o jsonpath='{.subsets[0].addresses[0].ip}')
+if [ -n "$ENDPOINTS" ]; then
+    echo "✓ Service has endpoints: $ENDPOINTS"
+else
+    echo "✗ Service has no endpoints"
+    exit 1
+fi
+
+# Test metrics endpoint
+echo "3. Testing metrics endpoint..."
+kubectl exec -n $NAMESPACE -l app=$SERVICE_NAME -- curl -s --max-time 5 localhost:$METRICS_PORT/metrics > /tmp/kafka-metrics.txt
+if [ $? -eq 0 ]; then
+    METRIC_COUNT=$(grep -c "^kafka_" /tmp/kafka-metrics.txt)
+    echo "✓ Metrics endpoint accessible, found $METRIC_COUNT kafka metrics"
+else
+    echo "✗ Metrics endpoint not accessible"
+    exit 1
+fi
+
+# Check for critical metrics
+echo "4. Checking for critical metrics..."
+CRITICAL_METRICS=("kafka_brokers" "kafka_topic_partitions" "kafka_consumergroup_lag")
+for metric in "${CRITICAL_METRICS[@]}"; do
+    if grep -q "$metric" /tmp/kafka-metrics.txt; then
+        echo "✓ Found $metric"
+    else
+        echo "⚠ Missing $metric"
+    fi
+done
+
+# Check ServiceMonitor
+echo "5. Checking ServiceMonitor..."
+kubectl get servicemonitor $SERVICE_NAME -n $NAMESPACE > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "✓ ServiceMonitor exists"
+else
+    echo "✗ ServiceMonitor missing"
+    exit 1
+fi
+
+echo "=== Health check complete ==="
+```
+
+---
+
+## 7 End-to-End Pipeline Testing
+
+### 7.1 Port-Forward Prometheus Agent
+```bash
+# Port-forward Prometheus agent for testing
+kubectl -n monitoring port-forward deploy/amp-agent-kube-prometheus-prometheus 9090:9090 &
+```
+
+### 7.2 Verify Metrics Collection
+```bash
+# Check that kafka-exporter metrics are collected by Prometheus
+echo "Testing kafka-exporter metrics collection..."
+curl -sG 'http://localhost:9090/api/v1/label/__name__/values' \
+     --data-urlencode 'match[]={job="kafka-exporter"}' | jq -r '.data[]' | head -10
+
+# Check for specific kafka metrics
+echo "Checking for kafka consumer group lag metrics..."
+curl -sG 'http://localhost:9090/api/v1/query' \
+     --data-urlencode 'query=kafka_consumergroup_lag' | jq '.data.result | length'
+
+# Check for Knative metrics
+echo "Checking for Knative metrics..."
+curl -sG 'http://localhost:9090/api/v1/label/__name__/values' \
+     --data-urlencode 'match[]={job=~".*knative.*"}' | jq -r '.data[]' | head -5
+```
+
+### 7.3 Verify Remote Write Queue Health
+```bash
+# Check samples being queued for remote write
+echo "Checking remote write queue..."
+curl -sG 'http://localhost:9090/api/v1/query' \
+     --data-urlencode 'query=prometheus_remote_storage_samples_in_total' | jq '.data.result'
+
+# Check samples being sent to AMP
+echo "Checking samples sent to AMP..."
+curl -sG 'http://localhost:9090/api/v1/query' \
+     --data-urlencode 'query=rate(prometheus_remote_storage_sent_samples_total[5m])' | jq '.data.result'
+
+# Check for any remote write errors
+echo "Checking for remote write errors..."
+curl -sG 'http://localhost:9090/api/v1/query' \
+     --data-urlencode 'query=prometheus_remote_storage_failed_samples_total' | jq '.data.result'
+```
+
+### 7.4 Test AMP Data Reception
+```bash
+# Query AMP directly for kafka metrics
+echo "Querying AMP directly for kafka metrics..."
+aws --region us-east-1 aps query \
+    --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 \
+    --query-string 'count(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"})'
+
+# Query for Knative metrics
+echo "Querying AMP for Knative metrics..."
+aws --region us-east-1 aps query \
+    --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 \
+    --query-string 'count({cluster="d-use1-rp-eks-srsc-st-01", __name__=~"knative_.*"})'
+```
+
+---
+
+## 8 Grafana Integration and Validation
+
+### 8.1 Configure Grafana Data Source
+1. **Open Grafana** → **Configuration** → **Data Sources** → **Add data source**
+2. **Select** → **Amazon Managed Prometheus**
+3. **Configure**:
+   - **Name**: `AMP-Knative-Kafka`
+   - **Workspace ID**: `ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363`
+   - **Region**: `us-east-1`
+   - **Authentication**: `AWS SigV4`
+   - **Default Region**: `us-east-1`
+4. **Click** → **Save & Test** (should show "Data source is working")
+
+### 8.2 Test Grafana Queries
+```promql
+# Test basic connectivity
+up{cluster="d-use1-rp-eks-srsc-st-01"}
+
+# Test kafka metrics
+kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}
+
+# Test Knative metrics
+rate(knative_broker_events_total{cluster="d-use1-rp-eks-srsc-st-01"}[5m])
+
+# Test aggregated metrics
+sum(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}) by (consumergroup)
+```
+
+### 8.3 Create Sample Dashboard
+```json
+{
+  "dashboard": {
+    "title": "Kafka & Knative Metrics",
+    "panels": [
+      {
+        "title": "Kafka Consumer Group Lag",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "kafka_consumergroup_lag{cluster=\"d-use1-rp-eks-srsc-st-01\"}",
+            "legendFormat": "{{consumergroup}} - {{topic}}"
+          }
+        ]
+      },
+      {
+        "title": "Knative Broker Events Rate",
+        "type": "graph", 
+        "targets": [
+          {
+            "expr": "rate(knative_broker_events_total{cluster=\"d-use1-rp-eks-srsc-st-01\"}[5m])",
+            "legendFormat": "{{broker}} - {{event_type}}"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 9 Comprehensive Troubleshooting Guide
+
+### 9.1 Common Issues and Solutions
+
+#### Issue: kafka-exporter Not Collecting Metrics
+**Symptoms**: No kafka metrics in Prometheus, web interface shows connection errors
+**Diagnostics**:
+```bash
+# Check pod logs
+kubectl logs -n monitoring -l app=kafka-exporter
+
+# Check Kafka connectivity
+kubectl exec -n monitoring -l app=kafka-exporter -- nc -zv <kafka-broker> 9092
+
+# Test authentication
+kubectl exec -n monitoring -l app=kafka-exporter -- kafkacat -b <kafka-broker>:9092 -L
+```
+
+#### Issue: ServiceMonitor Not Discovered
+**Symptoms**: Targets not showing up in Prometheus
+**Diagnostics**:
+```bash
+# Check ServiceMonitor labels
+kubectl get servicemonitor kafka-exporter -n monitoring -o yaml
+
+# Check if Prometheus can access ServiceMonitor
+kubectl get servicemonitor -A --show-labels
+```
+
+#### Issue: Remote Write Failures
+**Symptoms**: Metrics in Prometheus but not in AMP
+**Diagnostics**:
+```bash
+# Check IAM permissions
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus | grep -i "sigv4\|remote_write\|401\|403"
+
+# Test AMP connectivity
+kubectl run amp-test --rm -it --restart=Never --image=curlimages/curl -- \
+  curl -v https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363/api/v1/remote_write
+```
+
+### 9.2 Useful Debugging Commands
+```bash
+# List all ServiceMonitors
+kubectl get servicemonitor -A
+
+# Check Prometheus targets
+curl -s localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job == "kafka-exporter")'
+
+# Check queue health
+curl -s localhost:9090/api/v1/query?query=prometheus_remote_storage_pending_samples | jq .
+
+# Check network connectivity
+kubectl run netcheck --rm -it --restart=Never --image=busybox -- \
+  nc -zv kafka-exporter.monitoring.svc.cluster.local 9308
+```
+
+### 9.3 Performance Monitoring
+```bash
+# Monitor remote write performance
+curl -s localhost:9090/api/v1/query?query=rate(prometheus_remote_storage_sent_samples_total[5m]) | jq .
+
+# Check scrape duration
+curl -s localhost:9090/api/v1/query?query=scrape_duration_seconds | jq .
+
+# Monitor memory usage
+kubectl top pods -n monitoring
+```
+
+---
+
+## 10 Maintenance and Monitoring
+
+### 10.1 Regular Health Checks
+```bash
+# Weekly health check script
+#!/bin/bash
+echo "=== Weekly Metrics Pipeline Health Check ==="
+
+# Check all components
+kubectl get pods -n monitoring | grep -E "prometheus|kafka-exporter"
+
+# Check AMP workspace
+aws aps describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
+
+# Test end-to-end flow
+aws aps query --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --query-string 'up{cluster="d-use1-rp-eks-srsc-st-01"}' --region us-east-1
+```
+
+### 10.2 Alerting Rules
+```yaml
+# prometheus-rules.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kafka-knative-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - name: kafka
+    rules:
+    - alert: KafkaConsumerGroupLag
+      expr: kafka_consumergroup_lag > 1000
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Kafka consumer group lag is high"
+        description: "Consumer group {{ $labels.consumergroup }} has lag of {{ $value }}"
+  
+  - name: knative
+    rules:
+    - alert: KnativeBrokerDown
+      expr: up{job=~".*knative.*"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Knative broker is down"
+```
+
+This improved guide provides comprehensive testing for kafka-exporter, detailed troubleshooting steps, and a much more user-friendly experience with validation at every step.
