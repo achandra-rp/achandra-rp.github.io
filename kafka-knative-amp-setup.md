@@ -817,5 +817,3 @@ spec:
       annotations:
         summary: "Knative broker is down"
 ```
-
-This improved guide provides comprehensive testing for kafka-exporter, detailed troubleshooting steps, and a much more user-friendly experience with validation at every step.
