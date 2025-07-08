@@ -2,6 +2,8 @@
 
 *Complete setup and testing for Prometheus Agent → Amazon Managed Prometheus (AMP) → Grafana dashboards for Knative & Kafka*
 
+![image](https://github.com/user-attachments/assets/e8b7b32e-cb26-4488-a15a-96d7626c233c)
+
 ---
 
 ## 1 Prerequisites & Environment Validation
