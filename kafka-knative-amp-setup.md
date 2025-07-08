@@ -10,7 +10,7 @@
 * **EKS cluster** (≥ 1.24) with OIDC provider enabled
 * **Command line tools**: `helm` ≥ 3.10, `kubectl`, `jq`, and AWS CLI v2
 * **AWS Resources**: 
-  - AMP workspace (e.g., `ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363`)
+  - AMP workspace (e.g., `<AMP_WORKSPACE_ID>`)
   - Grafana instance with AMP integration
 * **Kafka cluster**: MSK, Strimzi, or other Kafka deployment reachable from EKS nodes
 * **Knative**: Serving and/or Eventing components installed
@@ -30,7 +30,7 @@ aws --version
 pip install awscurl
 
 # Check AMP workspace exists
-aws amp describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
+aws amp describe-workspace --workspace-id <AMP_WORKSPACE_ID> --region <YOUR_AWS_REGION>
 
 # Verify Knative components
 kubectl get pods -n knative-serving
@@ -73,7 +73,7 @@ cat > amp-ingest-policy.json << EOF
         "aps:GetLabels",
         "aps:GetMetricMetadata"
       ],
-      "Resource": "arn:aws:aps:us-east-1:$AWS_ACCOUNT_ID:workspace/ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
+      "Resource": "arn:aws:aps:<YOUR_AWS_REGION>:$AWS_ACCOUNT_ID:workspace/<AMP_WORKSPACE_ID>"
     }
   ]
 }
@@ -89,12 +89,12 @@ cat > amp-trust-policy.json << EOF
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::$AWS_ACCOUNT_ID:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/$OIDC_ID"
+        "Federated": "arn:aws:iam::$AWS_ACCOUNT_ID:oidc-provider/oidc.eks.<YOUR_AWS_REGION>.amazonaws.com/id/$OIDC_ID"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "oidc.eks.us-east-1.amazonaws.com/id/$OIDC_ID:sub": "system:serviceaccount:monitoring:amp-iamproxy-ingest"
+          "oidc.eks.<YOUR_AWS_REGION>.amazonaws.com/id/$OIDC_ID:sub": "system:serviceaccount:monitoring:amp-iamproxy-ingest"
         }
       }
     }
@@ -151,9 +151,9 @@ helm repo update
 ### 3.2 Install Prometheus Agent
 ```bash
 # Replace these values with your actual cluster name and workspace ID
-CLUSTER_NAME="d-use1-rp-eks-srsc-st-01"
-WORKSPACE_ID="ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
-AWS_REGION="us-east-1"
+CLUSTER_NAME="<YOUR_CLUSTER_NAME>"
+WORKSPACE_ID="<AMP_WORKSPACE_ID>"
+AWS_REGION="<YOUR_AWS_REGION>"
 
 helm upgrade --install amp-agent prometheus-community/kube-prometheus-stack \
   --namespace monitoring --create-namespace \
@@ -255,19 +255,19 @@ spec:
     spec:
       containers:
       - name: kafka-exporter
-        image: danielqsj/kafka-exporter:v1.7.0  # Use specific version
+        image: danielqsj/kafka-exporter:v1.7.0
         args:
           # Replace with your actual Kafka broker endpoints
-          - '--kafka.server=b-1.example.kafka.amazonaws.com:9096'
-          - '--kafka.server=b-2.example.kafka.amazonaws.com:9096'
-          - '--kafka.server=b-3.example.kafka.amazonaws.com:9096'
+          - '--kafka.server=<KAFKA_BROKER_1>'
+          - '--kafka.server=<KAFKA_BROKER_2>'
+          - '--kafka.server=<KAFKA_BROKER_3>'
           - '--sasl.enabled'
           - '--sasl.username=$(KAFKA_USERNAME)'
           - '--sasl.password=$(KAFKA_PASSWORD)'
           - '--sasl.mechanism=scram-sha512'
           - '--tls.enabled'
           - '--tls.insecure-skip-tls-verify'
-          - '--kafka.version=3.5.1'
+          - '--kafka.version=<KAFKA_VERSION>'
           - '--web.listen-address=:9308'
           - '--log.level=info'
         env:
@@ -530,7 +530,7 @@ awscurl --version
 ### 7.2 Port-Forward Prometheus Agent
 ```bash
 # Port-forward Prometheus agent for testing
-kubectl -n monitoring port-forward deploy/amp-agent-kube-prometheus-prometheus 9090:9090 &
+kubectl -n monitoring port-forward deploy/<PROMETHEUS_AGENT_DEPLOYMENT_NAME> 9090:9090 &
 ```
 
 ### 7.3 Verify Metrics Collection
@@ -572,8 +572,8 @@ curl -sG 'http://localhost:9090/api/v1/query' \
 ### 7.5 Test AMP Data Reception
 ```bash
 # First, get the workspace endpoint
-WORKSPACE_ID="ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
-AWS_REGION="us-east-1"
+WORKSPACE_ID="<AMP_WORKSPACE_ID>"
+AWS_REGION="<YOUR_AWS_REGION>"
 
 # Get the query endpoint URL
 QUERY_ENDPOINT=$(aws amp describe-workspace \
@@ -589,7 +589,7 @@ echo "Querying AMP directly for kafka metrics..."
 awscurl -X POST --region $AWS_REGION \
     --service aps \
     "${QUERY_ENDPOINT}api/v1/query" \
-    -d 'query=count(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"})' \
+    -d 'query=count(kafka_consumergroup_lag{cluster="<YOUR_CLUSTER_NAME>"})' \
     --header 'Content-Type: application/x-www-form-urlencoded'
 
 # Query for Knative metrics
@@ -597,21 +597,19 @@ echo "Querying AMP for Knative metrics..."
 awscurl -X POST --region $AWS_REGION \
     --service aps \
     "${QUERY_ENDPOINT}api/v1/query" \
-    -d 'query=count({cluster="d-use1-rp-eks-srsc-st-01", __name__=~"knative_.*"})' \
+    -d 'query=count({cluster="<YOUR_CLUSTER_NAME>", __name__=~"knative_.*"})' \
     --header 'Content-Type: application/x-www-form-urlencoded'
 
-# Alternative: Using Docker for awscurl (if you don't want to install Python dependencies)
-export WORKSPACE_ID="ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363"
-export AWS_REGION="us-east-1"
+# Alternative: Using Docker for awscurl
+export WORKSPACE_ID="<AMP_WORKSPACE_ID>"
+export AWS_REGION="<YOUR_AWS_REGION>"
 
-# Get the query endpoint URL
 QUERY_ENDPOINT=$(aws amp describe-workspace \
     --workspace-id $WORKSPACE_ID \
     --region $AWS_REGION \
     --query 'workspace.prometheusEndpoint' \
     --output text)
 
-# Query using Docker
 docker run --rm -it \
     -e AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY \
@@ -620,7 +618,7 @@ docker run --rm -it \
     --region $AWS_REGION \
     --service aps \
     "${QUERY_ENDPOINT}api/v1/query" \
-    -d 'query=up{cluster="d-use1-rp-eks-srsc-st-01"}' \
+    -d 'query=up{cluster="<YOUR_CLUSTER_NAME>"}' \
     --header 'Content-Type: application/x-www-form-urlencoded'
 ```
 
@@ -633,25 +631,25 @@ docker run --rm -it \
 2. **Select** → **Amazon Managed Prometheus**
 3. **Configure**:
    - **Name**: `AMP-Knative-Kafka`
-   - **Workspace ID**: `ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363`
-   - **Region**: `us-east-1`
+   - **Workspace ID**: `<AMP_WORKSPACE_ID>`
+   - **Region**: `<YOUR_AWS_REGION>`
    - **Authentication**: `AWS SigV4`
-   - **Default Region**: `us-east-1`
+   - **Default Region**: `<YOUR_AWS_REGION>`
 4. **Click** → **Save & Test** (should show "Data source is working")
 
 ### 8.2 Test Grafana Queries
 ```promql
 # Test basic connectivity
-up{cluster="d-use1-rp-eks-srsc-st-01"}
+up{cluster="<YOUR_CLUSTER_NAME>"}
 
 # Test kafka metrics
-kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}
+kafka_consumergroup_lag{cluster="<YOUR_CLUSTER_NAME>"}
 
 # Test Knative metrics
-rate(knative_broker_events_total{cluster="d-use1-rp-eks-srsc-st-01"}[5m])
+rate(knative_broker_events_total{cluster="<YOUR_CLUSTER_NAME>"}[5m])
 
 # Test aggregated metrics
-sum(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}) by (consumergroup)
+sum(kafka_consumergroup_lag{cluster="<YOUR_CLUSTER_NAME>"}) by (consumergroup)
 ```
 
 ### 8.3 Create Sample Dashboard
@@ -665,7 +663,7 @@ sum(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}) by (consumergro
         "type": "graph",
         "targets": [
           {
-            "expr": "kafka_consumergroup_lag{cluster=\"d-use1-rp-eks-srsc-st-01\"}",
+            "expr": "kafka_consumergroup_lag{cluster=\"<YOUR_CLUSTER_NAME>\"}",
             "legendFormat": "{{consumergroup}} - {{topic}}"
           }
         ]
@@ -675,7 +673,7 @@ sum(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}) by (consumergro
         "type": "graph", 
         "targets": [
           {
-            "expr": "rate(knative_broker_events_total{cluster=\"d-use1-rp-eks-srsc-st-01\"}[5m])",
+            "expr": "rate(knative_broker_events_total{cluster=\"<YOUR_CLUSTER_NAME>\"}[5m])",
             "legendFormat": "{{broker}} - {{event_type}}"
           }
         ]
@@ -692,7 +690,7 @@ sum(kafka_consumergroup_lag{cluster="d-use1-rp-eks-srsc-st-01"}) by (consumergro
 ### 9.1 Common Issues and Solutions
 
 #### Issue: kafka-exporter Not Collecting Metrics
-**Symptoms**: No kafka metrics in Prometheus, web interface shows connection errors
+**Symptoms**: No kafka metrics in Prometheus, web interface shows connection errors  
 **Diagnostics**:
 ```bash
 # Check pod logs
@@ -706,7 +704,7 @@ kubectl exec -n monitoring -l app=kafka-exporter -- kafkacat -b <kafka-broker>:9
 ```
 
 #### Issue: ServiceMonitor Not Discovered
-**Symptoms**: Targets not showing up in Prometheus
+**Symptoms**: Targets not showing up in Prometheus  
 **Diagnostics**:
 ```bash
 # Check ServiceMonitor labels
@@ -717,7 +715,7 @@ kubectl get servicemonitor -A --show-labels
 ```
 
 #### Issue: Remote Write Failures
-**Symptoms**: Metrics in Prometheus but not in AMP
+**Symptoms**: Metrics in Prometheus but not in AMP  
 **Diagnostics**:
 ```bash
 # Check IAM permissions
@@ -725,7 +723,7 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus | grep -i "sigv4
 
 # Test AMP connectivity
 kubectl run amp-test --rm -it --restart=Never --image=curlimages/curl -- \
-  curl -v https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363/api/v1/remote_write
+  curl -v https://aps-workspaces.<YOUR_AWS_REGION>.amazonaws.com/workspaces/<AMP_WORKSPACE_ID>/api/v1/remote_write
 ```
 
 ### 9.2 Useful Debugging Commands
@@ -770,19 +768,19 @@ echo "=== Weekly Metrics Pipeline Health Check ==="
 kubectl get pods -n monitoring | grep -E "prometheus|kafka-exporter"
 
 # Check AMP workspace
-aws amp describe-workspace --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 --region us-east-1
+aws amp describe-workspace --workspace-id <AMP_WORKSPACE_ID> --region <YOUR_AWS_REGION>
 
 # Test end-to-end flow with awscurl
 QUERY_ENDPOINT=$(aws amp describe-workspace \
-    --workspace-id ws-16154fd8-5a2f-43af-9f6a-bd86dbbf0363 \
-    --region us-east-1 \
+    --workspace-id <AMP_WORKSPACE_ID> \
+    --region <YOUR_AWS_REGION> \
     --query 'workspace.prometheusEndpoint' \
     --output text)
 
-awscurl -X POST --region us-east-1 \
+awscurl -X POST --region <YOUR_AWS_REGION> \
     --service aps \
     "${QUERY_ENDPOINT}api/v1/query" \
-    -d 'query=up{cluster="d-use1-rp-eks-srsc-st-01"}' \
+    -d 'query=up{cluster="<YOUR_CLUSTER_NAME>"}' \
     --header 'Content-Type: application/x-www-form-urlencoded'
 ```
 
@@ -817,3 +815,5 @@ spec:
       annotations:
         summary: "Knative broker is down"
 ```
+
+---
