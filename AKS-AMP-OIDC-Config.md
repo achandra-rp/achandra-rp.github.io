@@ -1,8 +1,8 @@
-# ## Authenticating AKS with AWS Managed Prometheus (AMP) using OIDC
+# Authenticating AKS with AWS Managed Prometheus (AMP) using OIDC
 
 This guide provides step-by-step instructions to securely configure an Azure Kubernetes Service (AKS) cluster to send metrics to an AWS Managed Service for Prometheus (AMP) workspace. It uses the recommended OIDC federation method, which avoids static credentials.
 
-### ## Prerequisites
+### Prerequisites
 
   * An active Azure subscription with an AKS cluster.
   * An active AWS account with an AMP workspace.
@@ -11,7 +11,7 @@ This guide provides step-by-step instructions to securely configure an Azure Kub
 
 -----
 
-### ## Step 1: Configure AKS and Get the OIDC Issuer URL
+### Step 1: Configure AKS and Get the OIDC Issuer URL
 
 First, enable both the OIDC issuer and workload identity on your AKS cluster and retrieve its public URL.
 
@@ -43,7 +43,7 @@ First, enable both the OIDC issuer and workload identity on your AKS cluster and
 
 -----
 
-### ## Step 2: Create the IAM OIDC Provider and Role in AWS
+### Step 2: Create the IAM OIDC Provider and Role in AWS
 
 Configure AWS to trust your AKS cluster and create a role with specific permissions.
 
@@ -132,7 +132,7 @@ Configure AWS to trust your AKS cluster and create a role with specific permissi
 
 -----
 
-### ## Step 3: Configure Microsoft Entra ID for Federation
+### Step 3: Configure Microsoft Entra ID for Federation
 
 Create an Azure AD application and link it to your Kubernetes service account.
 
@@ -171,7 +171,7 @@ Create an Azure AD application and link it to your Kubernetes service account.
 
 -----
 
-### ## Step 4: Create and Annotate the Kubernetes Service Account
+### Step 4: Create and Annotate the Kubernetes Service Account
 
 Deploy a service account in AKS that your Prometheus pod will use.
 
@@ -216,7 +216,7 @@ Deploy a service account in AKS that your Prometheus pod will use.
 
 -----
 
-### ## Step 5: Configure and Deploy Prometheus
+### Step 5: Configure and Deploy Prometheus
 
 Finally, configure your Prometheus instance to use the service account and SigV4 authentication.
 
@@ -261,7 +261,7 @@ Finally, configure your Prometheus instance to use the service account and SigV4
 
 -----
 
-### ## Troubleshooting
+### Troubleshooting
 
 If you encounter issues with the workload identity setup, follow these troubleshooting steps:
 
@@ -288,7 +288,7 @@ If you encounter issues with the workload identity setup, follow these troublesh
 
 -----
 
-### ## Testing the Configuration
+### Testing the Configuration
 
 To manually test the OIDC federation and AWS role assumption from within a pod:
 
@@ -325,7 +325,7 @@ To manually test the OIDC federation and AWS role assumption from within a pod:
 
 -----
 
-### ## Common Issues
+### Common Issues
 
 **Issue: Token file not found**
 - **Error**: `open /var/run/secrets/azure/tokens/azure-identity-token: no such file or directory`
