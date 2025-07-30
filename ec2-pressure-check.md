@@ -21,7 +21,7 @@ A comprehensive monitoring tool that provides a tabular overview of all EKS work
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/blob/main/ec2-pressure-check.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/refs/heads/main/ec2-pressure-check.sh
 chmod +x ec2-pressure-check.sh
 ```
 
