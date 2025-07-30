@@ -19,7 +19,7 @@ An interactive debugging tool for launching privileged debug pods on Kubernetes 
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/blob/main/k8s-node-debug.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/refs/heads/main/k8s-node-debug.sh
 chmod +x node-debug.sh
 ```
 
