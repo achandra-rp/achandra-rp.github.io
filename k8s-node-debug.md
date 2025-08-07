@@ -1,164 +1,141 @@
 # Kubernetes Node Debug Tool
 
-An interactive debugging tool for launching privileged debug pods on Kubernetes nodes with system-level access for troubleshooting and maintenance.
+Debug Kubernetes nodes by launching privileged pods with host access.
 
 ## Features
 
-- **Interactive Node Selection**: Uses fzf for browsing and selecting nodes
-- **Real-time Node Status**: Shows node conditions and troubleshooting hints
-- **Privileged Access**: Provides host filesystem and process access
-- **Smart Condition Analysis**: Detects disk pressure, memory pressure, PID pressure, and readiness issues
-- **Comprehensive Troubleshooting**: Built-in commands for common debugging scenarios
+- Interactive node selection with fzf
+- Shows node conditions and troubleshooting tips
+- Host filesystem and process access
+- Detects pressure conditions automatically
+- Built-in debugging commands
 
 ## Prerequisites
 
-- `kubectl` configured with cluster access
-- `fzf` for interactive mode (optional if specifying node directly)
-- Appropriate RBAC permissions for creating debug pods
+- kubectl with cluster access
+- fzf for interactive mode (optional)
+- RBAC permissions for debug pods
 
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/refs/heads/main/k8s-node-debug.sh
-chmod +x node-debug.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/k8s-node-debug.sh
+chmod +x k8s-node-debug.sh
 ```
 
 ## Usage
 
-### Interactive Mode (Recommended)
+### Interactive Mode
 ```bash
-./node-debug.sh
+./k8s-node-debug.sh
 ```
-Browse nodes with arrow keys, search by typing, and see real-time troubleshooting info.
 
-### Direct Node Specification
+### Direct Node
 ```bash
-./node-debug.sh -n worker-node-1
+./k8s-node-debug.sh -n worker-node-1
 ```
 
 ### Custom Options
 ```bash
-./node-debug.sh -n worker-node-1 -i ubuntu:22.04 -s kube-system
+./k8s-node-debug.sh -n worker-1 -i ubuntu:22.04 -s kube-system
 ```
 
-## Command Line Options
+## Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
+| Flag | Description | Default |
+|------|-------------|---------|
 | `-n <node-name>` | Target node name | Interactive selection |
 | `-i <image>` | Container image to use | `ubuntu` |
 | `-s <namespace>` | Namespace for debug pod | `kube-system` |
 | `-I` | Force interactive mode | `false` |
 | `-h` | Show help message | - |
 
-## Host System Access
+## Host Access
 
-Once connected to the debug pod, use these commands to access the host system:
+Commands to use inside the debug pod:
 
-### File System Access
+### Filesystem
 ```bash
-# Change root to host filesystem (most common)
-chroot /host
-
-# Access host files directly
-ls /host/etc/kubernetes/
+chroot /host              # Most common
+ls /host/etc/kubernetes/  # Direct access
 cat /host/proc/version
 tail -f /host/var/log/messages
 ```
 
-### Process and Network Access
+### Processes & Network
 ```bash
-# View host processes
-nsenter -t 1 -p -n ps aux
-nsenter -t 1 -p -n top
-
-# Check network connections
-nsenter -t 1 -n netstat -tulpn
-nsenter -t 1 -n ip addr show
+nsenter -t 1 -p -n ps aux      # Host processes
+nsenter -t 1 -p -n top         # Process monitor
+nsenter -t 1 -n netstat -tulpn # Network connections
+nsenter -t 1 -n ip addr show   # Network interfaces
 ```
 
-### Kubernetes Troubleshooting
+### Kubernetes
 ```bash
-# Check kubelet service
-chroot /host systemctl status kubelet
-chroot /host journalctl -u kubelet -f
-
-# Container runtime debugging
-chroot /host crictl ps
-chroot /host crictl logs <container-id>
+chroot /host systemctl status kubelet  # Kubelet status
+chroot /host journalctl -u kubelet -f   # Kubelet logs
+chroot /host crictl ps                  # Containers
+chroot /host crictl logs <container-id> # Container logs
 ```
 
-## Automated Issue Detection
+## Issue Detection
 
-The tool automatically detects and provides troubleshooting guidance for:
+Automatically detects:
 
-- **Disk Pressure**: High disk usage affecting node performance
-- **Memory Pressure**: Insufficient memory causing pod evictions
-- **PID Pressure**: Too many processes running on the node
-- **Node Not Ready**: Kubelet or system issues preventing readiness
+- **Disk Pressure**: High disk usage
+- **Memory Pressure**: Low memory causing evictions
+- **PID Pressure**: Too many processes
+- **Not Ready**: Kubelet or system issues
 
-## Interactive Features
+## Interactive Mode
 
-When using fzf interactive mode:
+fzf controls:
+- Arrow keys: Navigate
+- Type: Search/filter
+- Preview: Node conditions and commands
+- Ctrl+R: Refresh
+- Ctrl+/: Toggle preview
 
-- **Arrow Keys**: Navigate through nodes
-- **Type to Search**: Filter nodes by name
-- **Preview Panel**: Shows node conditions and troubleshooting commands
-- **Ctrl+R**: Refresh node list
-- **Ctrl+/**: Toggle preview panel
+## Security Notes
 
-## Security Considerations
-
-This tool creates privileged pods with:
-- Host filesystem access (`/host` mount)
-- Host process namespace access
-- Host network namespace access
+Creates privileged pods with:
+- Host filesystem access
+- Host process/network namespaces
 - SYS_ADMIN capabilities
 
-Only use on nodes you have authorization to debug and ensure proper cleanup of debug pods.
+Only use on authorized nodes and clean up debug pods.
 
 ## Troubleshooting
 
-### Common Issues
-
 **fzf not found**
 ```bash
-# macOS
-brew install fzf
-
-# Ubuntu/Debian
-apt install fzf
-
-# RHEL/CentOS
-yum install fzf
+brew install fzf      # macOS
+apt install fzf       # Ubuntu
+yum install fzf       # RHEL
 ```
 
 **No kubectl context**
 ```bash
 kubectl config current-context
-aws eks update-kubeconfig --region <region> --name <cluster-name>
+aws eks update-kubeconfig --region <region> --name <cluster>
 ```
 
 **Permission denied**
-Ensure your user has RBAC permissions to create pods in the target namespace and use the `debug` API.
+Need RBAC permissions for pods and debug API.
 
 ## Examples
 
-### Debug a specific worker node
 ```bash
-./node-debug.sh -n ip-10-0-1-100.ec2.internal
-```
+# Debug specific node
+./k8s-node-debug.sh -n ip-10-0-1-100.ec2.internal
 
-### Use custom image for debugging
-```bash
-./node-debug.sh -n worker-1 -i alpine:latest
-```
+# Custom image
+./k8s-node-debug.sh -n worker-1 -i alpine:latest
 
-### Force interactive selection with node specified
-```bash
-./node-debug.sh -I -n worker-1
+# Force interactive mode
+./k8s-node-debug.sh -I -n worker-1
 ```
 
 ## Contributing
 
-Issues and pull requests welcome. Please ensure scripts follow security best practices and include appropriate error handling.
+Pull requests welcome. Follow security best practices.

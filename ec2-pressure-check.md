@@ -1,51 +1,46 @@
 # EKS Node Pressure Monitor
 
-A comprehensive monitoring tool that provides a tabular overview of all EKS worker nodes, correlating AWS EC2 instance information with Kubernetes node conditions to identify pressure issues across your cluster.
+Monitor EKS node pressure conditions across your cluster. Shows EC2 instances mapped to Kubernetes nodes with pressure status.
 
 ## Features
 
-- **Cluster-wide Overview**: Shows all EKS nodes in a formatted table
-- **AWS/K8s Correlation**: Maps EC2 instances to Kubernetes nodes
-- **Pressure Detection**: Monitors disk, memory, and PID pressure conditions
-- **Node Status Tracking**: Real-time readiness status for all nodes
-- **Instance Details**: Shows instance type, availability zone, and IDs
-- **Configurable AWS Profile**: Environment variable support for different AWS accounts
+- Cluster-wide node overview in table format
+- Maps EC2 instances to Kubernetes nodes
+- Monitors disk, memory, and PID pressure
+- Shows node readiness status
+- Displays instance types and availability zones
+- Configurable AWS profiles
 
 ## Prerequisites
 
-- `kubectl` configured with EKS cluster access
-- `aws` CLI configured with appropriate permissions
-- AWS permissions for `ec2:describe-instances`
-- Kubernetes permissions to read node status
+- kubectl with EKS cluster access
+- AWS CLI with ec2:describe-instances permission
+- Kubernetes node read permissions
 
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/refs/heads/main/ec2-pressure-check.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/ec2-pressure-check.sh
 chmod +x ec2-pressure-check.sh
 ```
 
 ## Usage
 
-### Basic Usage
 ```bash
+# Basic usage
 ./ec2-pressure-check.sh
-```
 
-### Custom AWS Profile
-```bash
-export AWS_PROFILE=my-production-profile
+# Custom AWS profile
+export AWS_PROFILE=my-profile
 ./ec2-pressure-check.sh
+
+# One-time override
+AWS_PROFILE=dev ./ec2-pressure-check.sh
 ```
 
-### One-time Profile Override
-```bash
-AWS_PROFILE=dev-environment ./ec2-pressure-check.sh
-```
+## Output
 
-## Output Format
-
-The tool displays a comprehensive table with the following columns:
+Table columns:
 
 | Column | Description |
 |--------|-------------|
@@ -59,25 +54,25 @@ The tool displays a comprehensive table with the following columns:
 | **Disk-Pressure** | Disk pressure status |
 | **Status** | Kubernetes node readiness |
 
-## Status Indicators
+## Status Values
 
-### Pressure Conditions
-- **OK**: No pressure detected, condition is False
-- **HIGH**: Pressure condition is active (True)
-- **HIGH-PID**: PID pressure detected (too many processes)
-- **Unknown**: Unable to determine condition status
-- **N/A**: Node not found in Kubernetes cluster
+### Pressure
+- **OK**: No pressure (condition False)
+- **HIGH**: Pressure active (condition True)
+- **HIGH-PID**: PID pressure (too many processes)
+- **Unknown**: Can't determine status
+- **N/A**: Node not in Kubernetes
 
 ### Node Status
-- **Ready**: Node is ready to accept pods
-- **NotReady**: Node has issues preventing pod scheduling
-- **Unknown**: Unable to determine node status
-- **N/A**: Node not found in Kubernetes
+- **Ready**: Accepting pods
+- **NotReady**: Has issues
+- **Unknown**: Can't determine
+- **N/A**: Not in Kubernetes
 
-## Example Output
+## Sample Output
 
 ```
-EKS Node Pressure Status for cluster: my-production-cluster
+EKS Node Status - Cluster: my-cluster
 
 ┌──────────────────────┬─────────────────────┬──────────────────────────────┬──────────────┬─────────────────┬──────────────┬──────────────┬───────────────┬────────────┐
 │ Name                 │ Instance-ID         │ K8s-Node-Name                │ Type         │ AZ              │ CPU-Pressure │ Mem-Pressure │ Disk-Pressure │ Status     │
@@ -88,115 +83,81 @@ EKS Node Pressure Status for cluster: my-production-cluster
 └──────────────────────┴─────────────────────┴──────────────────────────────┴──────────────┴─────────────────┴──────────────┴──────────────┴───────────────┴────────────┘
 
 Legend:
-  HIGH      - Node has pressure condition active
-  OK        - Node has no pressure condition
-  HIGH-PID  - Node has PID pressure (too many processes)
-  N/A       - Node not found in Kubernetes
+  HIGH      - Pressure condition active
+  OK        - No pressure
+  HIGH-PID  - PID pressure (too many processes)
+  N/A       - Not found in Kubernetes
 ```
 
 ## Configuration
 
-### AWS Profile
-The script uses the `shared-rsc-prod` profile by default, but can be overridden:
+Default AWS profile: `shared-rsc-prod`
 
 ```bash
-# Method 1: Environment variable
+# Override profile
 export AWS_PROFILE=my-profile
-./ec2-pressure-check.sh
-
-# Method 2: Inline override
 AWS_PROFILE=my-profile ./ec2-pressure-check.sh
 ```
 
-### EKS Cluster Detection
-The script automatically detects the EKS cluster from your current kubectl context:
+Cluster detected from kubectl context:
 ```bash
 kubectl config current-context
-# Should show: arn:aws:eks:region:account:cluster/cluster-name
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-**No EKS cluster context found**
+**No cluster context**
 ```bash
-# Configure kubectl for your EKS cluster
 aws eks update-kubeconfig --region us-west-2 --name my-cluster
-
-# Verify context
 kubectl config current-context
 ```
 
 **AWS permissions error**
-Ensure your AWS credentials have the following permissions:
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DescribeInstances"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-```
+Need `ec2:DescribeInstances` permission.
 
-**Node not found in Kubernetes**
-This indicates EC2 instances that are tagged for the cluster but not registered as Kubernetes nodes. Common causes:
-- Instance startup in progress
-- Kubelet configuration issues
-- Network connectivity problems
+**Node not in Kubernetes**
+EC2 instances tagged for cluster but not registered as nodes:
+- Instance still starting up
+- Kubelet config issues
+- Network problems
 - IAM role issues
 
-### Debugging High Pressure Nodes
+### Debugging Pressure
 
 **Memory Pressure**
 ```bash
-# Check memory usage on the node
 kubectl top nodes
-kubectl describe node <node-name>
-
-# Debug using node-debug.sh
-./node-debug.sh -n <node-name>
+./k8s-node-debug.sh -n <node>
 # Then: chroot /host free -h
 ```
 
 **Disk Pressure**
 ```bash
-# Check disk usage
-kubectl describe node <node-name>
-
-# Debug using node-debug.sh  
-./node-debug.sh -n <node-name>
+./k8s-node-debug.sh -n <node>
 # Then: chroot /host df -h
 ```
 
 **PID Pressure**
 ```bash
-# Check process count
-./node-debug.sh -n <node-name>
+./k8s-node-debug.sh -n <node>
 # Then: nsenter -t 1 -p -n ps aux | wc -l
 ```
 
 ## Integration
 
-This tool pairs well with:
-- **node-debug.sh**: For detailed debugging of specific nodes
-- **Prometheus/Grafana**: For historical pressure trend monitoring
-- **CloudWatch**: For AWS-level instance monitoring
-- **CI/CD pipelines**: For automated cluster health checks
+Pairs well with:
+- k8s-node-debug.sh for detailed node debugging
+- Prometheus/Grafana for historical trends
+- CloudWatch for AWS metrics
+- CI/CD for automated health checks
 
 ## Use Cases
 
-- **Pre-deployment Health Checks**: Verify cluster capacity before deployments
-- **Incident Response**: Quickly identify problematic nodes during outages
-- **Capacity Planning**: Monitor pressure trends to plan scaling
-- **Cost Optimization**: Identify underutilized or over-pressured instances
+- Pre-deployment capacity checks
+- Incident response for node issues
+- Capacity planning and scaling
+- Cost optimization
 
 ## Contributing
 
-Issues and pull requests welcome. Please ensure changes maintain backward compatibility and include appropriate error handling for AWS API calls.
+Pull requests welcome. Maintain backward compatibility and include error handling.
