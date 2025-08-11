@@ -62,13 +62,13 @@ done
 
 ```bash
 # Access Vector's view of Kubernetes logs
-kubectl exec -n vector vector-efs-0 -- cat /var/log/pods/rpvna_db-store-v5-deployment-*/db-store/0.log
+kubectl exec -n vector vector-efs-0 -- cat /var/log/pods/<namespace>_<app>-deployment-*/app/0.log
 
 # Search logs directly from Vector's log mount
 kubectl exec -n vector vector-efs-0 -- sh -c 'grep -hF "DB Store operation completed" /var/log/containers/db-store*log*'
 
 # Copy Vector's processed logs for analysis
-kubectl cp vector-efs-0:/var/log/pods/rpvna_db-store-v5-deployment-*/db-store/* . -n vector
+kubectl cp vector-efs-0:/var/log/pods/<namespace>_<app>-deployment-*/app/* . -n vector
 ```
 
 ### Vector Tap Commands

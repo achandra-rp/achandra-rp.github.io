@@ -3,9 +3,9 @@
 This document contains all the queries used during the troubleshooting to diagnose and fix the multi-cluster vector monitoring setup.
 
 ## Environment Setup
-- **Grafana URL**: `https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com`
-- **AMP Workspace**: `ws-eb486b77-4f33-45f8-a896-924d4c192290`
-- **Clusters**: `prpkseaedge01`, `prpksmwedge01`
+- **Grafana URL**: `https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com`
+- **AMP Workspace**: `<amp-workspace-id>`
+- **Clusters**: `<cluster-name-1>`, `<cluster-name-2>`
 
 ## Grafana API Queries
 
@@ -13,14 +13,14 @@ This document contains all the queries used during the troubleshooting to diagno
 ```bash
 # Search for vector-related dashboards
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/search?query=vector"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/search?query=vector"
 ```
 
 ### 2. Datasource Information
 ```bash
 # Get available datasources
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources"
 ```
 
 ### 3. Label Value Queries (via Grafana Proxy to AMP)
@@ -29,21 +29,21 @@ curl -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Get all vector_instance label values
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values"
 ```
 
 #### Check Available Clusters
 ```bash
 # Get all cluster label values
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values"
 ```
 
 #### Check Vector Jobs
 ```bash
 # Get all job labels containing "vector"
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/job/values" | \
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/job/values" | \
   jq '.data[] | select(test("vector"))'
 ```
 
@@ -53,7 +53,7 @@ curl -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Get vector_instance variable configuration from dashboard
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/dashboards/uid/vector_multienv_dashboard" | \
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/dashboards/uid/vector_multienv_dashboard" | \
   jq '.dashboard.templating.list[] | select(.name=="vector_instance")'
 ```
 
@@ -65,14 +65,14 @@ curl -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Check if specific services are up
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up%7Bjob%3D~%22.*prpksmwedge01.*%22%7D"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up%7Bjob%3D~%22.*<cluster-name-mw>.*%22%7D"
 ```
 
 #### Check Vector Started Status
 ```bash
 # Verify vector instances are running
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total"
 ```
 
 ### 2. Vector-Specific Metrics
@@ -81,16 +81,16 @@ curl -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Check if vector components are receiving events
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_component_received_events_total"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_component_received_events_total"
 ```
 
 #### Filter by Cluster
 ```bash
 # Get metrics from specific cluster with data freshness
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total" | \
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total" | \
   jq --argjson current_time $(date +%s) \
-  '.data.result[] | select(.metric.cluster == "prpksmwedge01" or .metric.cluster == "prpkseaedge01") |
+  '.data.result[] | select(.metric.cluster == "<cluster-name-mw>" or .metric.cluster == "<cluster-name-se>") |
    {cluster: .metric.cluster, vector_instance: .metric.vector_instance, age_seconds: ($current_time - .value[0])}'
 ```
 
@@ -100,9 +100,9 @@ curl -s -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Verify data is recent (age in seconds)
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up" | \
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up" | \
   jq --argjson current_time $(date +%s) \
-  '.data.result[] | select(.metric.job | contains("prpksmwedge01")) |
+  '.data.result[] | select(.metric.job | contains("<cluster-name-mw>")) |
    {job: .metric.job, cluster: .metric.cluster, age_seconds: ($current_time - .value[0])}'
 ```
 
@@ -110,8 +110,8 @@ curl -s -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Check if vector components have processed events
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_component_received_events_total" | \
-  jq '.data.result[] | select(.metric.cluster == "prpksmwedge01" or .metric.cluster == "prpkseaedge01") | 
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_component_received_events_total" | \
+  jq '.data.result[] | select(.metric.cluster == "<cluster-name-mw>" or .metric.cluster == "<cluster-name-se>") | 
       {cluster: .metric.cluster, vector_instance: .metric.vector_instance, job: .metric.job, has_data: (.value[1] | tonumber > 0)}'
 ```
 
@@ -121,8 +121,8 @@ curl -s -H "Authorization: Bearer <TOKEN>" \
 ```bash
 # Test the exact query used by dashboard variables
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values?match[]=vector_component_received_events_total" | \
-  jq '.data[] | select(contains("prpksmwedge01") or contains("prpkseaedge01"))'
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values?match[]=vector_component_received_events_total" | \
+  jq '.data[] | select(contains("<cluster-name-mw>") or contains("<cluster-name-se>"))'
 ```
 
 ## Direct Prometheus Queries (kubectl port-forward)
@@ -243,10 +243,10 @@ rate(vector_source_lag_time_seconds_sum[5m]) / rate(vector_source_lag_time_secon
 ### 4. Multi-Cluster Queries
 ```promql
 # Compare metrics across clusters
-vector_component_received_events_total{cluster=~"prpkseaedge01|prpksmwedge01"}
+vector_component_received_events_total{cluster=~"<cluster-name-se>|<cluster-name-mw>"}
 
 # Cluster-specific filtering
-vector_started_total{cluster="prpksmwedge01"}
+vector_started_total{cluster="<cluster-name-mw>"}
 
 # Environment and deployment filtering
 vector_component_received_events_total{environment="edge",deployment=~"k8s|vna"}
@@ -258,11 +258,11 @@ vector_component_received_events_total{environment="edge",deployment=~"k8s|vna"}
 ```bash
 # Check if cluster appears in metrics
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values"
 
 # Search for any metrics from specific cluster
 curl -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up%7Bcluster%3D%22prpksmwedge01%22%7D"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up%7Bcluster%3D%22<cluster-name-mw>%22%7D"
 ```
 
 ### 2. Service Discovery Issues
@@ -288,14 +288,14 @@ kubectl get prometheus -n monitoring -o yaml | grep "aps-workspaces"
 ```bash
 # Check cluster data availability
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values"
 
 # Verify vector instances
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values"
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values"
 
 # Test data freshness
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  "https://g-ff472922d6.grafana-workspace.us-east-1.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total" | \
+  "https://<grafana-workspace-id>.grafana-workspace.<region>.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total" | \
   jq --argjson current_time $(date +%s) '.data.result[] | {cluster: .metric.cluster, age_seconds: ($current_time - .value[0])}'
 ```

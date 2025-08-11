@@ -91,7 +91,7 @@ Legend:
 
 ## Configuration
 
-Default AWS profile: `shared-rsc-prod`
+Default AWS profile: `<your-aws-profile>`
 
 ```bash
 # Override profile

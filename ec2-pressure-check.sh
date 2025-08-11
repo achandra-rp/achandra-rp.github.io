@@ -1,6 +1,6 @@
 #!/bin/bash
 
-AWS_PROFILE=${AWS_PROFILE:-shared-rsc-prod}
+AWS_PROFILE=${AWS_PROFILE:-default}
 export AWS_PROFILE
 
 CLUSTER_NAME=$(kubectl config current-context | cut -d'/' -f2 2>/dev/null)
