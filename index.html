@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Abhishek Chandra</title>
+  </head>
+  <body>
+    <div id="root">
+      <noscript>
+        <div style="text-align: center; padding: 2rem; font-family: system-ui, sans-serif;">
+          <h1>JavaScript Required</h1>
+          <p>This site requires JavaScript to be enabled to display properly.</p>
+        </div>
+      </noscript>
+      <div id="loading" style="text-align: center; padding: 2rem; font-family: system-ui, sans-serif;">
+        <h1>Loading...</h1>
+        <p>Please wait while the site loads.</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Hide loading message once React app loads
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          const loading = document.getElementById('loading');
+          if (loading && document.querySelector('.resource-category')) {
+            loading.style.display = 'none';
+          }
+        }, 1000);
+      });
+    </script>
+  </body>
+</html>
