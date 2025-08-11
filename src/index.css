@@ -227,14 +227,16 @@ nav a:hover {
   flex: 1;
 }
 
-.external-link-icon {
+.arrow-icon {
   opacity: 0.6;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
   flex-shrink: 0;
+  transform: translateX(0);
 }
 
-.resource-link:hover .external-link-icon {
+.resource-link:hover .arrow-icon {
   opacity: 1;
+  transform: translateX(2px);
 }
 
 .resource-description {
