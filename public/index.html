@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Abhishek Chandra</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #222222;
+      --accent: #0066ff;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    main {
+      flex: 1;
+      max-width: 720px;
+      width: 90%;
+      margin: 0 auto;
+      padding: 4rem 0;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+    nav {
+      margin-top: 1rem;
+    }
+    nav a {
+      margin-right: 1rem;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
+    footer {
+      text-align: center;
+      font-size: 0.875rem;
+      padding: 2rem 0;
+      color: #888;
+    }
+    .resources {
+      margin-top: 3rem;
+    }
+    .resources h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .resources > p {
+      color: #666;
+      margin-bottom: 2rem;
+    }
+    .resource-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+    .resource-category {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 1.5rem;
+      border-left: 4px solid var(--accent);
+    }
+    .resource-category h3 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: var(--fg);
+    }
+    .resource-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .resource-list li {
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+    }
+    .resource-list a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .resource-list a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hi, I'm Abhishek 👋</h1>
+    <p>Software Engineer | Cloud &amp; Kubernetes Enthusiast | Photographer &amp; Poet</p>
+
+    <p>Welcome to my corner of the internet. I build scalable cloud‑native platforms at Radiology Partners and hack on open‑source in my spare time.</p>
+
+    <nav>
+      <!-- Update these links with your real profiles -->
+      <a href="https://github.com/achandra-rp" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://linkedin.com/in/abhishekchandra" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://abhichandra.com" target="_blank" rel="noopener">abhichandra.com</a>
+      <a href="https://poetrybyabhishek.com" target="_blank" rel="noopener">poetrybyabhishek.com</a>
+      <a href="mailto:me@abhichandra.com">Email</a>
+    </nav>
+
+    <section class="resources">
+      <h2>Technical Resources</h2>
+      <p>A collection of guides, tools, and documentation for cloud-native infrastructure and Kubernetes operations.</p>
+
+      <div class="resource-grid">
+        <div class="resource-category">
+          <h3>KEDA & Autoscaling</h3>
+          <ul class="resource-list">
+            <li><a href="KEDA-Driven-Autoscaling.html">KEDA-Driven Autoscaling Guide</a> - Comprehensive guide for Knative Kafka broker autoscaling</li>
+            <li><a href="KEDA-Knative-Kafka-Scaling-Guide.html">KEDA Scaling Test Guide</a> - Testing and validation procedures for KEDA scaling</li>
+            <li><a href="keda-install.html">KEDA Installation Guide</a> - Complete setup for EKS with Kafka broker and MSK</li>
+          </ul>
+        </div>
+
+        <div class="resource-category">
+          <h3>Kubernetes Operations</h3>
+          <ul class="resource-list">
+            <li><a href="AKS-AMP-OIDC-Config.html">AKS-AMP OIDC Setup</a> - Authenticating AKS with AWS Managed Prometheus</li>
+            <li><a href="troubleshooting-grafana.html">Troubleshooting Grafana</a> - Common issues and solutions for Grafana</li>
+          </ul>
+        </div>
+
+        <div class="resource-category">
+          <h3>Infrastructure Monitoring</h3>
+          <ul class="resource-list">
+            <li><a href="vector-install.html">Vector Deployment Guide</a> - Troubleshooting and deployment for Vector logging</li>
+            <li><a href="blackbox-exporter-setup.html">Blackbox Exporter Setup</a> - HTTP service monitoring with Prometheus</li>
+          </ul>
+        </div>
+
+        <div class="resource-category">
+          <h3>Kafka Integration</h3>
+          <ul class="resource-list">
+            <li><a href="kafka-knative-amp-setup.html">Kafka-Knative-AMP Setup</a> - End-to-end installation and validation guide</li>
+          </ul>
+        </div>
+
+        <div class="resource-category">
+          <h3>Scripts & Tools</h3>
+          <ul class="resource-list">
+            <li><a href="k8s-node-debug.html">K8s Node Debug Script</a> - Interactive node debugging tool with fzf integration</li>
+            <li><a href="ec2-pressure-check.html">EC2 Pressure Check Script</a> - EKS node pressure monitoring automation</li>
+            <li><a href="kafka-cli.html">Kafka CLI Pod</a> - Kubernetes pod configuration for Kafka operations</li>
+            <li><a href="net-tools-pod.html">Network Tools Pod</a> - Comprehensive Kubernetes debugging pod with network analysis tools</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    © <span id="year"></span> Abhishek Chandra
+  </footer>
+
+  <script>
+    // Keep the copyright year current
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
