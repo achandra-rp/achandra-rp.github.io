@@ -20,7 +20,7 @@ Monitor EKS node pressure conditions across your cluster. Shows EC2 instances ma
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/ec2-pressure-check.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/public/scripts/ec2-pressure-check.sh
 chmod +x ec2-pressure-check.sh
 ```
 

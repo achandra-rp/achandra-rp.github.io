@@ -19,7 +19,7 @@ Debug Kubernetes nodes by launching privileged pods with host access.
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/k8s-node-debug.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/public/scripts/k8s-node-debug.sh
 chmod +x k8s-node-debug.sh
 ```
 

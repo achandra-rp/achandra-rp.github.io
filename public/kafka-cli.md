@@ -59,7 +59,8 @@ kubectl create configmap kafka-broker-config \
 Deploy the Kafka CLI pod using the provided YAML configuration:
 
 ```bash
-kubectl apply -f kafka-cli.sh
+curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/public/kafka-cli.yaml
+kubectl apply -f kafka-cli.yaml
 ```
 
 Wait for the pod to be ready:
