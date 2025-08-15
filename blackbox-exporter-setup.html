@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>blackbox-exporter-setup</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Blackbox Exporter Setup for HTTP Service Monitoring</h1>
+<p>This guide covers setting up blackbox exporter to monitor HTTP endpoints and create reliable service availability alerts.</p>
+<h2>Overview</h2>
+<p>Blackbox exporter probes external endpoints and exports metrics about their availability. This provides more reliable monitoring than relying on internal service mesh metrics for actual service health.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li>Kubernetes cluster with Prometheus Operator</li>
+<li>Prometheus Agent configured to scrape ServiceMonitors</li>
+<li>Access to create resources in monitoring namespace</li>
+</ul>
+<h2>1. Deploy Blackbox Exporter</h2>
+<h3>Create ConfigMap with Probe Configuration</h3>
+<pre><code class="language-yaml">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-config
+  namespace: monitoring
+data:
+  blackbox.yml: |
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: [&quot;HTTP/1.1&quot;, &quot;HTTP/2.0&quot;]
+          valid_status_codes: []
+          method: GET
+          headers:
+            User-Agent: &quot;Blackbox Exporter&quot;
+          fail_if_not_ssl: false
+          fail_if_body_matches_regexp: []
+          fail_if_body_not_matches_regexp: []
+          fail_if_header_matches: []
+          fail_if_header_not_matches: []
+      http_post_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          method: POST
+          headers:
+            Content-Type: application/json
+          body: &#39;{}&#39;
+      http_2xx_4xx:
+        prober: http
+        timeout: 5s
+        http:
+          valid_http_versions: [&quot;HTTP/1.1&quot;, &quot;HTTP/2.0&quot;]
+          valid_status_codes: [200, 201, 202, 204, 401, 403]
+          method: GET
+          headers:
+            User-Agent: &quot;Blackbox Exporter&quot;
+          fail_if_not_ssl: false
+      tcp_connect:
+        prober: tcp
+        timeout: 5s
+      dns:
+        prober: dns
+        timeout: 5s
+        dns:
+          query_name: &quot;example.com&quot;
+          query_type: &quot;A&quot;
+</code></pre>
+<h3>Deploy Blackbox Exporter</h3>
+<pre><code class="language-yaml">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  template:
+    metadata:
+      labels:
+        app: blackbox-exporter
+    spec:
+      containers:
+      - name: blackbox-exporter
+        image: prom/blackbox-exporter:latest
+        ports:
+        - containerPort: 9115
+        args:
+          - --config.file=/etc/blackbox_exporter/blackbox.yml
+          - --web.listen-address=:9115
+        volumeMounts:
+        - name: config
+          mountPath: /etc/blackbox_exporter
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 200m
+          requests:
+            memory: 128Mi
+            cpu: 100m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9115
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9115
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: blackbox-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+  labels:
+    app: blackbox-exporter
+  annotations:
+    prometheus.io/scrape: &quot;true&quot;
+    prometheus.io/port: &quot;9115&quot;
+    prometheus.io/path: &quot;/metrics&quot;
+spec:
+  ports:
+  - port: 9115
+    targetPort: 9115
+    name: http
+  selector:
+    app: blackbox-exporter
+</code></pre>
+<h2>2. Configure Prometheus Scraping</h2>
+<h3>Basic ServiceMonitor for Blackbox Exporter Metrics</h3>
+<pre><code class="language-yaml">apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+  labels:
+    app: blackbox-exporter
+spec:
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+</code></pre>
+<h3>ServiceMonitor for HTTP Endpoint Probes</h3>
+<pre><code class="language-yaml">apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loki-blackbox-probe
+  namespace: monitoring
+  labels:
+    app: loki-probe
+spec:
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /probe
+    params:
+      module: [http_2xx_4xx]
+      target: 
+      - https://your-domain.com/loki/api/v1/labels
+    relabelings:
+    # Set the instance label to the target URL
+    - sourceLabels: [__param_target]
+      targetLabel: instance
+    - sourceLabels: [__param_target]
+      targetLabel: __tmp_target
+    # Point scraping to blackbox exporter
+    - targetLabel: __address__
+      replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
+    # Preserve target URL in target label
+    - sourceLabels: [__tmp_target]
+      targetLabel: target
+    # Set custom job name
+    - targetLabel: job
+      replacement: loki-gateway-probe
+    metricRelabelings:
+    # Add service label for easier alerting
+    - sourceLabels: [instance]
+      targetLabel: service
+      replacement: loki-gateway
+</code></pre>
+<h2>3. Key Metrics Exposed</h2>
+<h3>Main Probe Metrics</h3>
+<ul>
+<li><strong>probe_success</strong>: <code>1</code> if probe succeeded, <code>0</code> if failed</li>
+<li><strong>probe_duration_seconds</strong>: Time taken for probe to complete</li>
+<li><strong>probe_http_status_code</strong>: HTTP status code returned</li>
+<li><strong>probe_http_content_length</strong>: Length of HTTP response</li>
+<li><strong>probe_ssl_earliest_cert_expiry</strong>: SSL certificate expiration time</li>
+</ul>
+<h3>Example Queries</h3>
+<pre><code class="language-promql"># Service availability
+probe_success{job=&quot;loki-gateway-probe&quot;}
+
+# Average probe duration
+avg(probe_duration_seconds{job=&quot;loki-gateway-probe&quot;})
+
+# SSL certificate expiry (days remaining)
+(probe_ssl_earliest_cert_expiry - time()) / 86400
+
+# HTTP response codes
+probe_http_status_code{job=&quot;loki-gateway-probe&quot;}
+</code></pre>
+<h2>4. Sample Alert Rules</h2>
+<h3>Service Down Alert</h3>
+<pre><code class="language-yaml">groups:
+- name: blackbox-alerts
+  rules:
+  - alert: HTTPEndpointDown
+    expr: probe_success{job=&quot;loki-gateway-probe&quot;} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: loki-gateway
+      alert_type: http_probe
+    annotations:
+      summary: &quot;{{ $labels.service }} HTTP endpoint is down&quot;
+      description: &quot;HTTP probe to {{ $labels.instance }} has been failing for more than 1 minute&quot;
+
+  - alert: HTTPEndpointSlow
+    expr: probe_duration_seconds{job=&quot;loki-gateway-probe&quot;} &gt; 5
+    for: 2m
+    labels:
+      severity: warning
+      service: loki-gateway
+      alert_type: performance
+    annotations:
+      summary: &quot;{{ $labels.service }} HTTP endpoint is slow&quot;
+      description: &quot;HTTP probe to {{ $labels.instance }} is taking {{ $value }}s to respond&quot;
+
+  - alert: SSLCertificateExpiringSoon
+    expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 &lt; 30
+    for: 1h
+    labels:
+      severity: warning
+      service: loki-gateway
+      alert_type: certificate
+    annotations:
+      summary: &quot;SSL certificate expiring soon&quot;
+      description: &quot;SSL certificate for {{ $labels.instance }} expires in {{ $value }} days&quot;
+</code></pre>
+<h2>5. Multiple Endpoint Configuration</h2>
+<p>For monitoring multiple services, create separate ServiceMonitors:</p>
+<pre><code class="language-yaml">apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: multi-service-probes
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  endpoints:
+  # Loki Gateway
+  - port: http
+    interval: 30s
+    path: /probe
+    params:
+      module: [http_2xx]
+      target: [https://your-domain.com/loki/ready]
+    relabelings:
+    - sourceLabels: [__param_target]
+      targetLabel: instance
+    - targetLabel: __address__
+      replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
+    - targetLabel: job
+      replacement: loki-probe
+    - targetLabel: service
+      replacement: loki-gateway
+  
+  # Tempo Gateway  
+  - port: http
+    interval: 30s
+    path: /probe
+    params:
+      module: [http_2xx]
+      target: [https://your-domain.com/tempo/ready]
+    relabelings:
+    - sourceLabels: [__param_target]
+      targetLabel: instance
+    - targetLabel: __address__
+      replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
+    - targetLabel: job
+      replacement: tempo-probe
+    - targetLabel: service
+      replacement: tempo-gateway
+</code></pre>
+<h2>6. Troubleshooting</h2>
+<h3>Check Blackbox Exporter Status</h3>
+<pre><code class="language-bash"># Check pod status
+kubectl get pods -n monitoring | grep blackbox
+
+# Check logs
+kubectl logs -n monitoring deployment/blackbox-exporter
+
+# Test probe directly
+kubectl port-forward -n monitoring svc/blackbox-exporter 9115:9115
+curl &quot;http://localhost:9115/probe?target=https://example.com&amp;module=http_2xx&quot;
+</code></pre>
+<h3>Verify Prometheus Scraping</h3>
+<pre><code class="language-bash"># Check ServiceMonitor
+kubectl get servicemonitors -n monitoring
+
+# Port forward to Prometheus and check targets
+kubectl port-forward -n monitoring svc/prometheus-service 9090:9090
+# Navigate to http://localhost:9090/targets
+</code></pre>
+<h3>Common Issues</h3>
+<ol>
+<li><strong>Probe failing</strong>: Check target URL accessibility from cluster</li>
+<li><strong>No metrics in Grafana</strong>: Verify ServiceMonitor selector matches Prometheus configuration  </li>
+<li><strong>SSL errors</strong>: Adjust <code>fail_if_not_ssl</code> setting in blackbox config</li>
+<li><strong>Timeout issues</strong>: Increase probe timeout in configuration</li>
+<li><strong>Auth endpoints failing</strong>: Use <code>http_2xx_4xx</code> module for endpoints that return 401/403 for unauthenticated requests</li>
+<li><strong>Metrics not appearing in AMG</strong>: Allow 5-15 minutes for metrics to propagate through Prometheus Agent → AMP → AMG pipeline</li>
+</ol>
+<h3>Why HTTP Probes vs Internal Metrics</h3>
+<p><strong>HTTP probes are more reliable than internal service mesh metrics for several reasons:</strong></p>
+<ul>
+<li><strong>Real user experience</strong>: Tests the actual HTTP endpoint users/clients would hit</li>
+<li><strong>End-to-end validation</strong>: Includes network, load balancer, ingress, and service layers  </li>
+<li><strong>Auth-aware</strong>: Can distinguish between service down (503) vs auth required (401)</li>
+<li><strong>Service mesh independent</strong>: Works regardless of Istio/mesh configuration</li>
+<li><strong>Clear failure modes</strong>: Connection refused, timeout, or HTTP errors are unambiguous</li>
+</ul>
+<p><strong>Example: Istio <code>pilot_endpoint_not_ready</code> vs HTTP probe</strong></p>
+<ul>
+<li>Istio metrics may not trigger when pods are cleanly scaled down (normal behavior)</li>
+<li>HTTP probes detect actual service unavailability regardless of the cause</li>
+<li>Tested scenario: Scaling down loki-gateway triggered HTTP probe alert but not Istio endpoint alert</li>
+</ul>
+<h2>7. Best Practices</h2>
+<h3>Security</h3>
+<ul>
+<li>Use dedicated service account with minimal permissions</li>
+<li>Configure network policies to restrict blackbox exporter access</li>
+<li>Use secure endpoints (HTTPS) where possible</li>
+</ul>
+<h3>Performance</h3>
+<ul>
+<li>Set appropriate scrape intervals (30s-60s for most use cases)</li>
+<li>Monitor blackbox exporter resource usage</li>
+<li>Use multiple replicas for high availability</li>
+</ul>
+<h3>Alerting</h3>
+<ul>
+<li>Set reasonable evaluation periods (1-5 minutes)</li>
+<li>Use different severity levels (critical/warning)</li>
+<li>Include relevant context in alert descriptions</li>
+<li>Test alerts by temporarily scaling down services</li>
+</ul>
+<h3>Monitoring</h3>
+<ul>
+<li>Monitor the blackbox exporter itself</li>
+<li>Track probe success rates over time  </li>
+<li>Set up alerts for blackbox exporter downtime</li>
+<li>Use dashboards to visualize endpoint health trends</li>
+</ul>
+<h2>8. Integration with Grafana</h2>
+<h3>Sample Dashboard Queries</h3>
+<pre><code class="language-promql"># Service uptime percentage
+avg_over_time(probe_success{job=&quot;loki-gateway-probe&quot;}[24h]) * 100
+
+# Response time trends
+probe_duration_seconds{job=&quot;loki-gateway-probe&quot;}
+
+# Availability heatmap
+probe_success{job=~&quot;.*-probe&quot;}
+</code></pre>
+<p>This setup provides reliable HTTP endpoint monitoring that complements internal service metrics and gives you real-world service availability insights.</p>
+
+</body>
+</html>

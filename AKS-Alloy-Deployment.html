@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AKS-Alloy-Deployment</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Deploying Grafana Alloy on AKS with AWS Managed Prometheus Integration</h1>
+<p>This guide provides step-by-step instructions to deploy Grafana Alloy (OpenTelemetry collector) on an Azure Kubernetes Service (AKS) cluster that sends metrics to AWS Managed Prometheus (AMP). This guide assumes you have already deployed Prometheus on AKS with OIDC federation to AWS as documented in <code>AKS-AMP-OIDC-Config.md</code>.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li>An AKS cluster with OIDC issuer and workload identity enabled</li>
+<li>Existing Prometheus deployment with AWS AMP integration working</li>
+<li>Azure CLI (<code>az</code>) installed and configured</li>
+<li><code>kubectl</code> configured to connect to your AKS cluster</li>
+<li><code>helm</code> installed</li>
+<li>Access to the same AWS account and AMP workspace used by Prometheus</li>
+</ul>
+<h2>Overview</h2>
+<p>Grafana Alloy will be deployed as a DaemonSet to collect telemetry data from all nodes in your AKS cluster and forward metrics to your existing AWS Managed Prometheus workspace using the same OIDC federation mechanism.</p>
+<hr>
+<h2>Step 1: Verify Prerequisites</h2>
+<p>First, verify your existing setup is working correctly.</p>
+<h3>1.1 Check AKS Configuration</h3>
+<pre><code class="language-bash"># Verify OIDC issuer and workload identity are enabled
+az aks show --resource-group &lt;MyResourceGroup&gt; --name &lt;MyAKSCluster&gt; \
+  --query &quot;{oidcIssuer: oidcIssuerProfile.enabled, workloadIdentity: securityProfile.workloadIdentity.enabled}&quot; \
+  -o table
+
+# Get the OIDC issuer URL (save this for later steps)
+export AKS_OIDC_ISSUER=$(az aks show --name &lt;MyAKSCluster&gt; --resource-group &lt;MyResourceGroup&gt; \
+  --query &quot;oidcIssuerProfile.issuerUrl&quot; -o tsv)
+echo &quot;AKS OIDC Issuer: $AKS_OIDC_ISSUER&quot;
+</code></pre>
+<h3>1.2 Verify Existing Azure AD Application</h3>
+<pre><code class="language-bash"># Get your existing Azure AD application details
+export AZURE_APP_NAME=&quot;Prometheus-AMP-Federation&quot;  # Adjust if different
+export AZURE_CLIENT_ID=$(az ad app show --id &quot;$AZURE_APP_NAME&quot; --query &quot;appId&quot; -o tsv)
+export AZURE_APP_OBJECT_ID=$(az ad app show --id &quot;$AZURE_APP_NAME&quot; --query &quot;id&quot; -o tsv)
+
+echo &quot;Azure Client ID: $AZURE_CLIENT_ID&quot;
+echo &quot;Azure App Object ID: $AZURE_APP_OBJECT_ID&quot;
+</code></pre>
+<h3>1.3 Get AWS Configuration Details</h3>
+<pre><code class="language-bash"># Set your AWS configuration (adjust these values)
+export AWS_REGION=&quot;us-east-1&quot;  # Your AWS region
+export AWS_ACCOUNT_ID=&quot;123456789012&quot;  # Your AWS account ID
+export AMP_WORKSPACE_ID=&quot;ws-your-workspace-id&quot;  # Your AMP workspace ID
+export AWS_ROLE_NAME=&quot;AKS-Prometheus-AMP-Role&quot;  # Your existing IAM role name
+
+# Construct the role ARN
+export AWS_ROLE_ARN=&quot;arn:aws:iam::${AWS_ACCOUNT_ID}:role/${AWS_ROLE_NAME}&quot;
+echo &quot;AWS Role ARN: $AWS_ROLE_ARN&quot;
+</code></pre>
+<hr>
+<h2>Step 2: Create Alloy Namespace and Service Account</h2>
+<h3>2.1 Create Namespace</h3>
+<pre><code class="language-bash">kubectl create namespace grafana-alloy
+</code></pre>
+<h3>2.2 Create Service Account</h3>
+<pre><code class="language-bash"># Create the service account with workload identity annotations
+kubectl apply -f - &lt;&lt;EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-alloy
+  namespace: grafana-alloy
+  labels:
+    azure.workload.identity/use: &quot;true&quot;
+  annotations:
+    azure.workload.identity/client-id: ${AZURE_CLIENT_ID}
+EOF
+</code></pre>
+<h3>2.3 Verify Service Account Creation</h3>
+<pre><code class="language-bash"># Verify the service account was created with correct annotations
+kubectl get serviceaccount grafana-alloy -n grafana-alloy -o yaml
+
+# Check for the workload identity annotation
+kubectl get serviceaccount grafana-alloy -n grafana-alloy \
+  -o jsonpath=&#39;{.metadata.annotations.azure\.workload\.identity/client-id}&#39;
+</code></pre>
+<hr>
+<h2>Step 3: Update Azure AD Federated Credentials</h2>
+<p>Add Alloy&#39;s service account to your existing Azure AD application federation.</p>
+<h3>3.1 Create Federated Credential Configuration</h3>
+<pre><code class="language-bash"># Create the federated credential JSON for Alloy
+cat &gt; alloy-federated-credential.json &lt;&lt;EOF
+{
+    &quot;name&quot;: &quot;aks-alloy-federation&quot;,
+    &quot;issuer&quot;: &quot;${AKS_OIDC_ISSUER}&quot;,
+    &quot;subject&quot;: &quot;system:serviceaccount:grafana-alloy:grafana-alloy&quot;,
+    &quot;audiences&quot;: [
+        &quot;api://AzureADTokenExchange&quot;
+    ]
+}
+EOF
+</code></pre>
+<h3>3.2 Add Federated Credential to Azure AD App</h3>
+<pre><code class="language-bash"># Add the federated credential to your existing Azure AD application
+az ad app federated-credential create \
+  --id ${AZURE_APP_OBJECT_ID} \
+  --parameters alloy-federated-credential.json
+
+# Verify the federated credential was created
+az ad app federated-credential list --id ${AZURE_APP_OBJECT_ID} \
+  --query &quot;[?name==&#39;aks-alloy-federation&#39;]&quot; -o table
+</code></pre>
+<hr>
+<h2>Step 4: Update AWS IAM Role Trust Policy</h2>
+<p>Modify your existing AWS IAM role to trust both Prometheus and Alloy service accounts.</p>
+<h3>4.1 Get Current Trust Policy</h3>
+<pre><code class="language-bash"># Get the current trust policy
+aws iam get-role --role-name ${AWS_ROLE_NAME} \
+  --query &quot;Role.AssumeRolePolicyDocument&quot; &gt; current-trust-policy.json
+
+# Display current trust policy for reference
+cat current-trust-policy.json
+</code></pre>
+<h3>4.2 Create Updated Trust Policy</h3>
+<pre><code class="language-bash"># Extract OIDC provider path from issuer URL
+OIDC_PROVIDER_PATH=$(echo ${AKS_OIDC_ISSUER} | sed &#39;s|https://||&#39;)
+
+# Create updated trust policy with both service accounts
+cat &gt; updated-trust-policy.json &lt;&lt;EOF
+{
+    &quot;Version&quot;: &quot;2012-10-17&quot;,
+    &quot;Statement&quot;: [
+        {
+            &quot;Effect&quot;: &quot;Allow&quot;,
+            &quot;Principal&quot;: {
+                &quot;Federated&quot;: &quot;arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER_PATH}&quot;
+            },
+            &quot;Action&quot;: &quot;sts:AssumeRoleWithWebIdentity&quot;,
+            &quot;Condition&quot;: {
+                &quot;StringEquals&quot;: {
+                    &quot;${OIDC_PROVIDER_PATH}:sub&quot;: [
+                        &quot;system:serviceaccount:monitoring:prometheus-sa&quot;,
+                        &quot;system:serviceaccount:grafana-alloy:grafana-alloy&quot;
+                    ],
+                    &quot;${OIDC_PROVIDER_PATH}:aud&quot;: &quot;sts.amazonaws.com&quot;
+                }
+            }
+        }
+    ]
+}
+EOF
+</code></pre>
+<p><strong>Note</strong>: Adjust the first service account path (<code>system:serviceaccount:monitoring:prometheus-sa</code>) to match your actual Prometheus namespace and service account name.</p>
+<h3>4.3 Update the IAM Role</h3>
+<pre><code class="language-bash"># Update the trust policy
+aws iam update-assume-role-policy \
+  --role-name ${AWS_ROLE_NAME} \
+  --policy-document file://updated-trust-policy.json
+
+# Verify the trust policy was updated
+aws iam get-role --role-name ${AWS_ROLE_NAME} \
+  --query &quot;Role.AssumeRolePolicyDocument.Statement[0].Condition.StringEquals&quot;
+</code></pre>
+<hr>
+<h2>Step 5: Create Alloy Configuration</h2>
+<h3>5.1 Create Alloy Configuration File</h3>
+<pre><code class="language-bash">cat &gt; alloy-config.alloy &lt;&lt;EOF
+// OpenTelemetry receiver for logs, metrics, and traces
+otelcol.receiver.otlp &quot;default&quot; {
+  grpc {
+    endpoint = &quot;0.0.0.0:4317&quot;
+  }
+  http {
+    endpoint = &quot;0.0.0.0:4318&quot;
+  }
+  output {
+    logs    = [otelcol.processor.batch.logs.input]
+    metrics = [otelcol.processor.batch.metrics.input]
+    traces  = [otelcol.processor.batch.traces.input]
+  }
+}
+
+// Batch processor for better performance
+otelcol.processor.batch &quot;logs&quot; {
+  output {
+    logs = [otelcol.exporter.logging.logs.input]
+  }
+}
+
+otelcol.processor.batch &quot;metrics&quot; {
+  output {
+    metrics = [otelcol.exporter.prometheus.metrics.input]
+  }
+}
+
+otelcol.processor.batch &quot;traces&quot; {
+  output {
+    traces = [otelcol.exporter.logging.traces.input]
+  }
+}
+
+// Export metrics to AWS Managed Prometheus
+otelcol.exporter.prometheus &quot;metrics&quot; {
+  forward_to = [prometheus.remote_write.amp.receiver]
+}
+
+// Configure remote write to AWS Managed Prometheus
+prometheus.remote_write &quot;amp&quot; {
+  endpoint {
+    url = &quot;https://aps-workspaces.${AWS_REGION}.amazonaws.com/workspaces/${AMP_WORKSPACE_ID}/api/v1/remote_write&quot;
+    sigv4 {
+      region   = &quot;${AWS_REGION}&quot;
+      role_arn = &quot;${AWS_ROLE_ARN}&quot;
+    }
+  }
+}
+
+// Logging exporters for debugging
+otelcol.exporter.logging &quot;logs&quot; {
+  verbosity           = &quot;basic&quot;
+  sampling_initial    = 2
+  sampling_thereafter = 500
+}
+
+otelcol.exporter.logging &quot;traces&quot; {
+  verbosity           = &quot;basic&quot;
+  sampling_initial    = 2
+  sampling_thereafter = 500
+}
+
+// Kubernetes service discovery for scraping metrics
+discovery.kubernetes &quot;pods&quot; {
+  role = &quot;pod&quot;
+}
+
+discovery.kubernetes &quot;services&quot; {
+  role = &quot;service&quot;
+}
+
+discovery.kubernetes &quot;endpoints&quot; {
+  role = &quot;endpoints&quot;
+}
+
+// Scrape metrics from discovered targets
+prometheus.scrape &quot;kubernetes_pods&quot; {
+  targets    = discovery.kubernetes.pods.targets
+  forward_to = [prometheus.remote_write.amp.receiver]
+
+  scrape_interval = &quot;30s&quot;
+  scrape_timeout  = &quot;10s&quot;
+}
+
+prometheus.scrape &quot;kubernetes_services&quot; {
+  targets    = discovery.kubernetes.services.targets
+  forward_to = [prometheus.remote_write.amp.receiver]
+
+  scrape_interval = &quot;30s&quot;
+  scrape_timeout  = &quot;10s&quot;
+}
+EOF
+</code></pre>
+<h3>5.2 Create ConfigMap</h3>
+<pre><code class="language-bash"># Create ConfigMap with Alloy configuration
+kubectl create configmap grafana-alloy-config \
+  --from-file=config.alloy=alloy-config.alloy \
+  -n grafana-alloy
+</code></pre>
+<hr>
+<h2>Step 6: Create Alloy Helm Values</h2>
+<h3>6.1 Create Helm Values File</h3>
+<pre><code class="language-bash">cat &gt; alloy-values.yaml &lt;&lt;EOF
+# Alloy configuration
+alloy:
+  configMap:
+    create: false
+    name: grafana-alloy-config
+    key: config.alloy
+
+# Deploy as DaemonSet to collect from all nodes
+controller:
+  type: daemonset
+  
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Security context
+  securityContext:
+    runAsUser: 472
+    runAsGroup: 472
+    fsGroup: 472
+
+  # Tolerations to run on all nodes including master/control plane
+  tolerations:
+    - operator: Exists
+
+  # Node selector (optional)
+  nodeSelector: {}
+
+  # Host networking for better node visibility
+  hostNetwork: false
+  
+  # Volumes for logs and container runtime
+  extraVolumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: varlibdockercontainers
+      hostPath:
+        path: /var/lib/docker/containers
+
+  extraVolumeMounts:
+    - name: varlog
+      mountPath: /var/log
+      readOnly: true
+    - name: varlibdockercontainers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+
+# Use existing service account
+serviceAccount:
+  create: false
+  name: grafana-alloy
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    http:
+      port: 12345
+      targetPort: 12345
+      protocol: TCP
+    otlp-grpc:
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    otlp-http:
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+
+# Enable collection capabilities
+logs:
+  enabled: true
+traces:
+  enabled: true
+
+# Ingress (disabled by default)
+ingress:
+  enabled: false
+
+# RBAC permissions for Kubernetes service discovery
+rbac:
+  create: true
+
+# Cluster role for accessing Kubernetes resources
+clusterRole:
+  create: true
+  rules:
+    - apiGroups: [&quot;&quot;]
+      resources:
+        - nodes
+        - nodes/proxy
+        - nodes/metrics
+        - services
+        - endpoints
+        - pods
+        - ingresses
+        - configmaps
+      verbs: [&quot;get&quot;, &quot;list&quot;, &quot;watch&quot;]
+    - apiGroups: [&quot;extensions&quot;, &quot;networking.k8s.io&quot;]
+      resources:
+        - ingresses
+      verbs: [&quot;get&quot;, &quot;list&quot;, &quot;watch&quot;]
+    - apiGroups: [&quot;apps&quot;]
+      resources:
+        - deployments
+        - daemonsets
+        - replicasets
+        - statefulsets
+      verbs: [&quot;get&quot;, &quot;list&quot;, &quot;watch&quot;]
+    - nonResourceURLs: [&quot;/metrics&quot;, &quot;/metrics/cadvisor&quot;]
+      verbs: [&quot;get&quot;]
+EOF
+</code></pre>
+<hr>
+<h2>Step 7: Deploy Alloy</h2>
+<h3>7.1 Add Grafana Helm Repository</h3>
+<pre><code class="language-bash"># Add Grafana Helm repository
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+</code></pre>
+<h3>7.2 Deploy Alloy</h3>
+<pre><code class="language-bash"># Deploy Alloy using Helm
+helm install grafana-alloy grafana/alloy \
+  --namespace grafana-alloy \
+  --values alloy-values.yaml \
+  --wait
+</code></pre>
+<h3>7.3 Verify Deployment</h3>
+<pre><code class="language-bash"># Check if Alloy DaemonSet is running
+kubectl get daemonset -n grafana-alloy
+
+# Check pod status
+kubectl get pods -n grafana-alloy -o wide
+
+# Check if all nodes have Alloy pods
+kubectl get nodes
+kubectl get pods -n grafana-alloy -o wide | grep -c Running
+</code></pre>
+<hr>
+<h2>Step 8: Verify Configuration and Connectivity</h2>
+<h3>8.1 Check Workload Identity Integration</h3>
+<pre><code class="language-bash"># Get a running Alloy pod name
+ALLOY_POD=$(kubectl get pods -n grafana-alloy -l app.kubernetes.io/name=alloy -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+
+# Check if Azure workload identity environment variables are injected
+kubectl exec -n grafana-alloy $ALLOY_POD -- env | grep -E &quot;AZURE_|AWS_&quot;
+
+# Verify the Azure identity token file exists
+kubectl exec -n grafana-alloy $ALLOY_POD -- ls -la /var/run/secrets/azure/tokens/
+
+# Check if the token file contains a valid JWT
+kubectl exec -n grafana-alloy $ALLOY_POD -- cat /var/run/secrets/azure/tokens/azure-identity-token | cut -d. -f2 | base64 -d 2&gt;/dev/null | jq . || echo &quot;Token format check failed&quot;
+</code></pre>
+<h3>8.2 Check Alloy Logs</h3>
+<pre><code class="language-bash"># Check Alloy startup logs
+kubectl logs -n grafana-alloy $ALLOY_POD | head -50
+
+# Check for authentication and remote write errors
+kubectl logs -n grafana-alloy $ALLOY_POD | grep -i -E &quot;error|warn|auth|remote_write|sigv4&quot;
+
+# Follow logs in real-time
+kubectl logs -n grafana-alloy $ALLOY_POD -f
+</code></pre>
+<h3>8.3 Test AWS Role Assumption</h3>
+<pre><code class="language-bash"># Test role assumption from within the Alloy pod
+kubectl exec -n grafana-alloy $ALLOY_POD -- sh -c &#39;
+export AWS_ROLE_ARN=&quot;&#39;${AWS_ROLE_ARN}&#39;&quot;
+export AWS_WEB_IDENTITY_TOKEN_FILE=&quot;/var/run/secrets/azure/tokens/azure-identity-token&quot;
+export AWS_DEFAULT_REGION=&quot;&#39;${AWS_REGION}&#39;&quot;
+
+# Install AWS CLI if not present (for testing only)
+if ! command -v aws &amp;&gt; /dev/null; then
+    echo &quot;AWS CLI not found in container, role assumption test skipped&quot;
+    exit 0
+fi
+
+# Test role assumption
+aws sts assume-role-with-web-identity \
+  --role-arn &quot;$AWS_ROLE_ARN&quot; \
+  --role-session-name &quot;alloy-test&quot; \
+  --web-identity-token &quot;file://$AWS_WEB_IDENTITY_TOKEN_FILE&quot; \
+  --duration-seconds 3600 \
+  --query &quot;Credentials.AccessKeyId&quot; \
+  --output text
+&#39;
+</code></pre>
+<hr>
+<h2>Step 9: Monitoring and Validation</h2>
+<h3>9.1 Check Alloy Health Endpoint</h3>
+<pre><code class="language-bash"># Port forward to access Alloy&#39;s health endpoint
+kubectl port-forward -n grafana-alloy $ALLOY_POD 12345:12345 &amp;
+PORT_FORWARD_PID=$!
+
+# Check health endpoint
+curl -s http://localhost:12345/-/healthy || echo &quot;Health check failed&quot;
+
+# Check configuration endpoint
+curl -s http://localhost:12345/-/config | head -20
+
+# Stop port forwarding
+kill $PORT_FORWARD_PID 2&gt;/dev/null || true
+</code></pre>
+<h3>9.2 Verify Metrics in AWS Managed Prometheus</h3>
+<pre><code class="language-bash"># Query AWS Managed Prometheus to verify metrics are being received
+# You can use awscurl or the AWS Console
+
+# Example query using AWS CLI (if you have awscurl installed)
+# awscurl --service aps --region ${AWS_REGION} \
+#   &quot;https://aps-workspaces.${AWS_REGION}.amazonaws.com/workspaces/${AMP_WORKSPACE_ID}/api/v1/label/__name__/values&quot;
+</code></pre>
+<h3>9.3 Create Monitoring Dashboard</h3>
+<p>You can create a simple monitoring job to check Alloy status:</p>
+<pre><code class="language-bash">kubectl apply -f - &lt;&lt;EOF
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: alloy-health-check
+  namespace: grafana-alloy
+spec:
+  schedule: &quot;*/5 * * * *&quot;  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: grafana-alloy
+          containers:
+          - name: health-check
+            image: curlimages/curl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              ALLOY_POD=\$(kubectl get pods -n grafana-alloy -l app.kubernetes.io/name=alloy -o jsonpath=&#39;{.items[0].metadata.name}&#39; 2&gt;/dev/null)
+              if [ -n &quot;\$ALLOY_POD&quot; ]; then
+                kubectl exec -n grafana-alloy \$ALLOY_POD -- curl -s http://localhost:12345/-/healthy &gt;/dev/null
+                if [ \$? -eq 0 ]; then
+                  echo &quot;Alloy health check: PASSED&quot;
+                else
+                  echo &quot;Alloy health check: FAILED&quot;
+                fi
+              else
+                echo &quot;No Alloy pods found&quot;
+              fi
+          restartPolicy: OnFailure
+EOF
+</code></pre>
+<hr>
+<h2>Troubleshooting</h2>
+<h3>Common Issues and Solutions</h3>
+<h4>Issue: Alloy pods not starting</h4>
+<p><strong>Symptoms</strong>: Pods stuck in <code>Pending</code> or <code>CrashLoopBackOff</code> state</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Check pod events
+kubectl describe pod -n grafana-alloy $ALLOY_POD
+
+# Check node resources
+kubectl top nodes
+
+# Check for resource constraints
+kubectl get pods -n grafana-alloy -o yaml | grep -A 10 resources
+</code></pre>
+<h4>Issue: Workload Identity not working</h4>
+<p><strong>Symptoms</strong>: Missing Azure environment variables or token file</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Verify workload identity webhook is running
+kubectl get pods -n kube-system | grep azure-wi-webhook
+
+# Check service account annotations
+kubectl get serviceaccount grafana-alloy -n grafana-alloy -o yaml
+
+# Restart pods to trigger webhook injection
+kubectl rollout restart daemonset/grafana-alloy -n grafana-alloy
+</code></pre>
+<h4>Issue: AWS authentication failures</h4>
+<p><strong>Symptoms</strong>: 403 errors or &quot;Access Denied&quot; in logs</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Verify AWS role trust policy
+aws iam get-role --role-name ${AWS_ROLE_NAME} --query &quot;Role.AssumeRolePolicyDocument&quot;
+
+# Check AMP workspace permissions
+aws aps describe-workspace --workspace-id ${AMP_WORKSPACE_ID}
+
+# Verify role has APS permissions
+aws iam list-attached-role-policies --role-name ${AWS_ROLE_NAME}
+</code></pre>
+<h4>Issue: No metrics appearing in AMP</h4>
+<p><strong>Symptoms</strong>: Alloy running but no data in AWS Managed Prometheus</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Check Alloy configuration
+kubectl exec -n grafana-alloy $ALLOY_POD -- curl -s http://localhost:12345/-/config | grep -A 10 remote_write
+
+# Check for remote write errors
+kubectl logs -n grafana-alloy $ALLOY_POD | grep remote_write
+
+# Verify network connectivity
+kubectl exec -n grafana-alloy $ALLOY_POD -- nslookup aps-workspaces.${AWS_REGION}.amazonaws.com
+</code></pre>
+<hr>
+<h2>Cleanup</h2>
+<p>To remove the Alloy deployment:</p>
+<pre><code class="language-bash"># Remove Helm deployment
+helm uninstall grafana-alloy -n grafana-alloy
+
+# Remove namespace
+kubectl delete namespace grafana-alloy
+
+# Remove federated credential from Azure AD (optional)
+az ad app federated-credential delete \
+  --id ${AZURE_APP_OBJECT_ID} \
+  --federated-credential-id $(az ad app federated-credential list --id ${AZURE_APP_OBJECT_ID} --query &quot;[?name==&#39;aks-alloy-federation&#39;].id&quot; -o tsv)
+
+# Remove Alloy service account from AWS IAM trust policy (update trust policy to remove the Alloy service account)
+</code></pre>
+<hr>
+<h2>Additional Configuration Options</h2>
+<h3>Custom Metric Collection</h3>
+<p>You can modify the Alloy configuration to collect specific metrics:</p>
+<pre><code class="language-bash"># Update the ConfigMap with custom configuration
+kubectl create configmap grafana-alloy-config \
+  --from-file=config.alloy=your-custom-config.alloy \
+  -n grafana-alloy \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart DaemonSet to pick up new configuration
+kubectl rollout restart daemonset/grafana-alloy -n grafana-alloy
+</code></pre>
+<h3>Resource Limits Tuning</h3>
+<p>Adjust resource limits based on your cluster size:</p>
+<pre><code class="language-bash"># For larger clusters, update resource limits in alloy-values.yaml
+# Then upgrade the Helm deployment
+helm upgrade grafana-alloy grafana/alloy \
+  --namespace grafana-alloy \
+  --values alloy-values-updated.yaml
+</code></pre>
+<hr>
+<p>This completes the deployment of Grafana Alloy on AKS with AWS Managed Prometheus integration. The setup leverages your existing OIDC federation and provides a robust telemetry collection solution.</p>
+
+</body>
+</html>

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KEDA-Driven-Autoscaling</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1><strong>A Definitive Guide to KEDA-Driven Autoscaling for the Knative Kafka Broker Data Plane</strong></h1>
+<h2><strong>Architectural Deep Dive: The Interplay of Knative, Kafka, and KEDA</strong></h2>
+<p>Achieving efficient, event-driven autoscaling in a cloud-native environment requires a sophisticated interplay of specialized components. The integration of Kubernetes Event-Driven Autoscaling (KEDA) with the Knative Kafka Broker enables dynamic scaling based on real Kafka metrics.</p>
+<h3><strong>The Knative Kafka Broker&#39;s Two-Plane Architecture</strong></h3>
+<p>The Knative Kafka Broker is designed with a clear separation of concerns, embodied in its two-plane architecture: a control plane for management and a data plane for high-throughput message processing.</p>
+<h4><strong>Control Plane (Go)</strong></h4>
+<p>The control plane is the management layer responsible for observing the state of Knative custom resources (CRs) and reconciling the cluster state to match the user&#39;s declared intent.</p>
+<ul>
+<li><strong>Core Component:</strong> The primary component is the <code>kafka-controller</code>, which runs as a pod within the <code>knative-eventing</code> namespace.</li>
+<li><strong>Function:</strong> Its main responsibility is to watch for the creation, update, and deletion of Broker and Trigger custom resources. When a user creates a Broker, the controller ensures the necessary data plane deployments are created. When a user creates or updates a Trigger, the controller configures the data plane to subscribe to the appropriate topic and deliver events to the specified sink.</li>
+<li><strong>Configuration Propagation:</strong> The control plane translates the specifications of these CRs into configuration that the data plane can consume. This is typically achieved by writing to shared Kubernetes ConfigMaps or Secrets.</li>
+<li><strong>Implementation:</strong> The control plane is implemented in Go, aligning it with core Kubernetes and Knative components.</li>
+</ul>
+<h4><strong>Data Plane (Java/Vert.x)</strong></h4>
+<p>The data plane is the workhorse of the system, engineered specifically to handle the high-volume, low-latency flow of CloudEvents.</p>
+<ul>
+<li><strong>Core Components:</strong> The data plane is composed of two primary deployments: <code>kafka-broker-receiver</code> and <code>kafka-broker-dispatcher</code>.</li>
+<li><strong>Implementation:</strong> This plane is implemented in Java, utilizing the Eclipse Vert.x toolkit, a non-blocking, event-driven framework that excels at handling concurrent I/O operations.</li>
+</ul>
+<h3><strong>Anatomy of the Data Plane: receiver and dispatcher</strong></h3>
+<p>The two components of the data plane have distinct roles and, consequently, different deployment and scaling models.</p>
+<h4><strong>kafka-broker-receiver (Ingress)</strong></h4>
+<p>The <code>kafka-broker-receiver</code> serves as the front door for all events entering a Kafka Broker.</p>
+<ul>
+<li><strong>Role:</strong> Acts as an HTTP ingress point, exposing an endpoint for incoming CloudEvents sent by event producers. Upon receiving an event, it validates it and writes it to Kafka.</li>
+<li><strong>Deployment Model:</strong> Deployed as a standard Kubernetes Deployment, which is well-suited for its stateless nature.</li>
+<li><strong>Scaling Mechanism:</strong> The operational load on the receiver is proportional to the rate of incoming HTTP requests. It is <strong>not</strong> a target for the KEDA Kafka lag scaler.</li>
+</ul>
+<h4><strong>kafka-broker-dispatcher (Egress)</strong></h4>
+<p>The <code>kafka-broker-dispatcher</code> is responsible for delivering events from Kafka to their final destinations.</p>
+<ul>
+<li><strong>Role:</strong> Acts as a Kafka consumer group. It reads CloudEvents from the broker&#39;s topic and dispatches them via HTTP to the subscriber sinks defined by Knative Trigger resources.</li>
+<li><strong>Deployment Model:</strong> Deployed as a Kubernetes StatefulSet, which provides stable, unique network identifiers for its pods and guarantees ordered deployment and scaling.</li>
+<li><strong>Scaling Mechanism:</strong> The dispatcher is the <strong>primary and intended target for KEDA-driven autoscaling</strong>. Its workload is a direct function of the consumer lag on its Kafka topic.</li>
+</ul>
+<hr>
+<h2><strong>The KEDA Integration Model: A Decoupled Control Loop</strong></h2>
+<p>The integration of KEDA into the Knative Kafka Broker ecosystem is a collaboration between three independent controllers:</p>
+<ol>
+<li><strong>Knative kafka-controller:</strong> Manages the Broker and Trigger resources, setting up the fundamental data plane components (receiver and dispatcher).</li>
+<li><strong>KEDA keda-operator:</strong> Runs in the <code>keda</code> namespace and manages the core KEDA logic. It watches for ScaledObject resources and orchestrates the scaling of target workloads.</li>
+<li><strong>eventing-autoscaler-keda Controller:</strong> This is the critical bridge between the Knative and KEDA worlds. It is a separate, optional component that must be installed. It watches for Knative resources like Triggers annotated for KEDA scaling, and dynamically creates a corresponding KEDA ScaledObject CR.</li>
+</ol>
+<hr>
+<h2><strong>The End-to-End Reconciliation Flow: From Annotation to Scaled Pod</strong></h2>
+<p>The process of scaling a <code>kafka-broker-dispatcher</code> based on Kafka lag involves:</p>
+<ol>
+<li><p><strong>User Action:</strong> A platform engineer defines a Knative Trigger resource with KEDA-specific annotations.</p>
+</li>
+<li><p><strong>Knative Controller Reconciliation:</strong> The <code>kafka-controller</code> observes the new Trigger and ensures the dispatcher StatefulSet is configured.</p>
+</li>
+<li><p><strong>KEDA Autoscaler Detection:</strong> The <code>eventing-autoscaler-keda</code> controller detects the annotated Trigger and initiates reconciliation.</p>
+</li>
+<li><p><strong>ScaledObject Generation:</strong> The controller creates a KEDA ScaledObject resource:</p>
+<ul>
+<li><code>scaleTargetRef</code> points to the dispatcher StatefulSet.</li>
+<li><code>triggers</code> array contains the kafka trigger configuration.</li>
+<li>Scaling parameters like <code>minReplicaCount</code>, <code>maxReplicaCount</code>, etc., are parsed from annotations.</li>
+</ul>
+</li>
+<li><p><strong>KEDA Operator Action:</strong> The <code>keda-operator</code> detects the new ScaledObject and assumes responsibility for scaling.</p>
+</li>
+<li><p><strong>Metrics Provisioning and HPA Management:</strong> The operator polls the Kafka topic for lag, exposes this metric, and manages the HorizontalPodAutoscaler.</p>
+</li>
+<li><p><strong>Scaling Execution:</strong> The Kubernetes HPA controller queries the lag metric and scales the StatefulSet as needed.</p>
+</li>
+</ol>
+<hr>
+<h2><strong>Codebase Exploration: From Annotation to ScaledObject</strong></h2>
+<h3><strong>Inside eventing-autoscaler-keda: The Core Reconciliation Logic</strong></h3>
+<p>The <a href="https://github.com/knative-extensions/eventing-autoscaler-keda"><code>knative-extensions/eventing-autoscaler-keda</code></a> repository contains the adapter controller bridging Knative and KEDA.</p>
+<h4><strong>Controller Entrypoint (main.go)</strong></h4>
+<p>The entrypoint, typically at <code>cmd/controller/main.go</code>, initializes the Kubernetes client and controller.</p>
+<h4><strong>The Reconciler (pkg/reconciler/keda/keda.go)</strong></h4>
+<p>The core logic is the <code>Reconcile</code> function, which:</p>
+<ol>
+<li><strong>Annotation Check:</strong> Inspects the annotations of the resource for <code>autoscaling.knative.dev/class: keda.autoscaling.knative.dev</code>.</li>
+<li><strong>ScaledObject Generation:</strong> Constructs the ScaledObject using a helper function, <code>GenerateScaledObject</code>.</li>
+</ol>
+<h4><strong>Dissecting GenerateScaledObject</strong></h4>
+<p><code>GenerateScaledObject</code> takes a Knative resource object and produces a ScaledObject. Its steps:</p>
+<ul>
+<li>Instantiates an empty ScaledObject.</li>
+<li>Parses annotations.</li>
+<li>Populates scaling parameters.</li>
+<li>Constructs the trigger.</li>
+<li>Identifies the target workload.</li>
+<li>Returns the ScaledObject.</li>
+</ul>
+<hr>
+<h2><strong>Configuration Reference: Mastering Annotations and ConfigMaps</strong></h2>
+<h3><strong>Global Activation: The config-kafka-features ConfigMap</strong></h3>
+<p>Enable KEDA autoscaling globally:</p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-kafka-features
+  namespace: knative-eventing
+data:
+  controller-autoscaler-keda: &quot;enabled&quot;
+  # ... other config options
+</code></pre>
+<h3><strong>Comprehensive Annotation Dictionary</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Annotation Key</th>
+<th>Applies To</th>
+<th>Purpose</th>
+<th>ScaledObject Field</th>
+<th>Default Value</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>autoscaling.knative.dev/class</td>
+<td>Trigger, KafkaSource</td>
+<td><strong>Required.</strong> Enables KEDA scaling for the resource by specifying the KEDA autoscaler class.</td>
+<td>N/A (Enabler)</td>
+<td>kpa.autoscaling.knative.dev</td>
+<td>&quot;keda.autoscaling.knative.dev&quot;</td>
+</tr>
+<tr>
+<td>autoscaling.knative.dev/min-scale</td>
+<td>Trigger, KafkaSource</td>
+<td>Minimum replicas. &quot;0&quot; enables scale-to-zero.</td>
+<td>spec.minReplicaCount</td>
+<td>&quot;0&quot;</td>
+<td>&quot;1&quot;</td>
+</tr>
+<tr>
+<td>autoscaling.knative.dev/max-scale</td>
+<td>Trigger, KafkaSource</td>
+<td>Maximum replicas.</td>
+<td>spec.maxReplicaCount</td>
+<td>&quot;50&quot;</td>
+<td>&quot;20&quot;</td>
+</tr>
+<tr>
+<td>autoscaling.eventing.knative.dev/lag-threshold</td>
+<td>Trigger, KafkaSource</td>
+<td>Target unprocessed messages (consumer lag) per replica.</td>
+<td>spec.triggers.metadata.lagThreshold</td>
+<td>&quot;10&quot;</td>
+<td>&quot;20&quot;</td>
+</tr>
+<tr>
+<td>keda.autoscaling.knative.dev/pollingInterval</td>
+<td>Trigger, KafkaSource</td>
+<td>Polling interval in seconds.</td>
+<td>spec.pollingInterval</td>
+<td>&quot;30&quot;</td>
+<td>&quot;15&quot;</td>
+</tr>
+<tr>
+<td>keda.autoscaling.knative.dev/cooldownPeriod</td>
+<td>Trigger, KafkaSource</td>
+<td>Cooldown period in seconds.</td>
+<td>spec.cooldownPeriod</td>
+<td>&quot;300&quot;</td>
+<td>&quot;45&quot;</td>
+</tr>
+<tr>
+<td>keda.autoscaling.knative.dev/kafkaActivationLagThreshold</td>
+<td>Trigger, KafkaSource</td>
+<td>Consumer lag threshold to scale from zero.</td>
+<td>spec.triggers.metadata.activationLagThreshold</td>
+<td>&quot;1&quot;</td>
+<td>&quot;5&quot;</td>
+</tr>
+</tbody></table>
+<hr>
+<h2><strong>Data Plane Performance Tuning: Beyond Pod Counts</strong></h2>
+<p>Parameters are configured globally via the <code>config-kafka-broker-data-plane</code> ConfigMap.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>File in ConfigMap</th>
+<th>Purpose</th>
+<th>Impact on Scaling</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>max.poll.records</td>
+<td>config-kafka-broker-consumer.properties</td>
+<td>Max records fetched by consumer per poll.</td>
+<td>Directly controls throughput per pod.</td>
+<td>Tune based on workload.</td>
+</tr>
+<tr>
+<td>fetch.min.bytes</td>
+<td>config-kafka-broker-consumer.properties</td>
+<td>Minimum data for fetch request.</td>
+<td>Impacts batching and efficiency.</td>
+<td>Match to event size.</td>
+</tr>
+<tr>
+<td>maxPoolSize</td>
+<td>config-kafka-broker-webclient.properties</td>
+<td>Max Vert.x HTTP client pool size.</td>
+<td>Controls concurrent dispatches.</td>
+<td>Increase for higher concurrency.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2><strong>Practical Guide: Testing and Verifying Scaling Behavior</strong></h2>
+<h3><strong>Environment Prerequisites and Installation</strong></h3>
+<p><strong>Checklist:</strong></p>
+<ul>
+<li>A running Kubernetes cluster (Kind, Minikube, or cloud provider)</li>
+<li><code>kubectl</code> configured</li>
+<li>Helm v3+</li>
+</ul>
+<p><strong>Step-by-Step Installation:</strong></p>
+<ol>
+<li><strong>Install Strimzi Kafka Operator:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl create namespace kafka
+helm repo add strimzi https://strimzi.io/charts/
+helm install strimzi-kafka-operator strimzi/strimzi-kafka-operator --namespace kafka --version &lt;latest_version&gt;
+</code></pre>
+<ol start="2">
+<li><strong>Deploy a Kafka Cluster:</strong></li>
+</ol>
+<p><code>kafka-cluster.yaml</code>:</p>
+<pre><code class="language-yaml">apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-cluster
+  namespace: kafka
+spec:
+  kafka:
+    version: 3.5.1
+    replicas: 1
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+    storage:
+      type: jbod
+      volumes:
+        - id: 0
+          type: persistent-claim
+          size: 10Gi
+          deleteClaim: true
+  zookeeper:
+    replicas: 1
+    storage:
+      type: persistent-claim
+      size: 5Gi
+      deleteClaim: true
+</code></pre>
+<p>Apply with:</p>
+<pre><code class="language-bash">kubectl apply -f kafka-cluster.yaml -n kafka
+</code></pre>
+<ol start="3">
+<li><strong>Install Knative Serving and Eventing:</strong></li>
+</ol>
+<pre><code class="language-bash"># Install Knative Serving
+kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.18.0/serving-crds.yaml
+kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.18.0/serving-core.yaml
+
+# Install Knative Eventing
+kubectl apply -f https://github.com/knative/eventing/releases/download/knative-v1.18.0/eventing-crds.yaml
+kubectl apply -f https://github.com/knative/eventing/releases/download/knative-v1.18.0/eventing-core.yaml
+</code></pre>
+<ol start="4">
+<li><strong>Install Knative Kafka Broker:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl apply -f https://github.com/knative-extensions/eventing-kafka-broker/releases/download/knative-v1.18.0/eventing-kafka-controller.yaml
+kubectl apply -f https://github.com/knative-extensions/eventing-kafka-broker/releases/download/knative-v1.18.0/eventing-kafka-broker.yaml
+</code></pre>
+<ol start="5">
+<li><strong>Install KEDA:</strong></li>
+</ol>
+<pre><code class="language-bash">helm repo add kedacore https://kedacore.github.io/charts
+helm install keda kedacore/keda --namespace keda --create-namespace
+</code></pre>
+<ol start="6">
+<li><strong>Install the eventing-autoscaler-keda Controller:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl apply -f https://github.com/knative-extensions/eventing-autoscaler-keda/releases/download/knative-v1.18.0/eventing-autoscaler-keda.yaml
+</code></pre>
+<ol start="7">
+<li><strong>Enable KEDA in Knative:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl patch configmap config-kafka-features -n knative-eventing --type merge -p &#39;{&quot;data&quot;:{&quot;controller-autoscaler-keda&quot;:&quot;enabled&quot;}}&#39;
+</code></pre>
+<hr>
+<h3><strong>Test Scenario: Autoscaling a Broker Trigger&#39;s Dispatcher</strong></h3>
+<ol>
+<li><strong>Create a Test Namespace:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl create ns keda-test
+</code></pre>
+<ol start="2">
+<li><strong>Define a Sink Service</strong> (<code>sink.yaml</code>):</li>
+</ol>
+<pre><code class="language-yaml">apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: event-display
+  namespace: keda-test
+spec:
+  template:
+    spec:
+      containers:
+        - image: gcr.io/knative-releases/knative.dev/eventing/cmd/event_display
+</code></pre>
+<ol start="3">
+<li><strong>Define the Kafka Broker</strong> (<code>broker.yaml</code>):</li>
+</ol>
+<pre><code class="language-yaml">apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: keda-test
+</code></pre>
+<ol start="4">
+<li><strong>Define the Annotated Trigger</strong> (<code>trigger.yaml</code>):</li>
+</ol>
+<pre><code class="language-yaml">apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: keda-test-trigger
+  namespace: keda-test
+  annotations:
+    autoscaling.knative.dev/class: &quot;keda.autoscaling.knative.dev&quot;
+    autoscaling.knative.dev/min-scale: &quot;0&quot;
+    autoscaling.knative.dev/max-scale: &quot;10&quot;
+    autoscaling.eventing.knative.dev/lag-threshold: &quot;20&quot;
+    keda.autoscaling.knative.dev/cooldownPeriod: &quot;45&quot;
+spec:
+  broker: default
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: event-display
+</code></pre>
+<ol start="5">
+<li><strong>Apply the Manifests:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl apply -f sink.yaml -f broker.yaml -f trigger.yaml
+</code></pre>
+<hr>
+<h3><strong>Verification and Observation</strong></h3>
+<ol>
+<li><strong>Verify ScaledObject Creation:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl get scaledobject -n knative-eventing
+# Get the name of the ScaledObject
+SO_NAME=$(kubectl get scaledobject -n knative-eventing -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+kubectl get scaledobject $SO_NAME -n knative-eventing -o yaml
+</code></pre>
+<ol start="2">
+<li><strong>Verify HPA Creation:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl get hpa -n knative-eventing
+</code></pre>
+<ol start="3">
+<li><strong>Generate Kafka Load:</strong></li>
+</ol>
+<pre><code class="language-bash">kubectl -n kafka run kafka-producer -ti --image=quay.io/strimzi/kafka:0.37.0-kafka-3.5.1 --rm=true --restart=Never -- bin/kafka-console-producer.sh --bootstrap-server my-cluster-kafka-bootstrap:9092 --topic knative-broker-keda-test-default
+</code></pre>
+<p>Type/paste multiple lines to send messages.</p>
+<ol start="4">
+<li><strong>Observe Scaling Up:</strong></li>
+</ol>
+<pre><code class="language-bash">watch kubectl get pods -n knative-eventing -l app=kafka-broker-dispatcher
+</code></pre>
+<ol start="5">
+<li><strong>Observe Scaling Down:</strong></li>
+</ol>
+<ul>
+<li>Stop the producer pod (<code>Ctrl+C</code>).</li>
+<li>Monitor the event-display logs:</li>
+</ul>
+<pre><code class="language-bash">kubectl logs -n keda-test -l serving.knative.dev/service=event-display -c user-container -f
+</code></pre>
+<hr>
+<h3><strong>Troubleshooting Common Issues</strong></h3>
+<ul>
+<li><p><strong>ScaledObject is not created:</strong></p>
+<ul>
+<li>Check annotation spelling.</li>
+<li>Inspect logs of <code>eventing-autoscaler-keda-controller</code> pod.</li>
+<li>Ensure global feature flag is enabled.</li>
+</ul>
+</li>
+<li><p><strong>Pods do not scale up under load:</strong></p>
+<ul>
+<li>Describe the HPA resource (<code>kubectl describe hpa ...</code>).</li>
+<li>Check <code>keda-operator</code> logs.</li>
+<li>Ensure <code>consumerGroup</code> in ScaledObject matches dispatcher.</li>
+</ul>
+</li>
+<li><p><strong>Pods scale up, but throughput is low:</strong></p>
+<ul>
+<li>Tune parameters in <code>config-kafka-broker-data-plane</code>.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2><strong>Conclusion and Expert Recommendations</strong></h2>
+<h3><strong>Summary of Architectural Patterns</strong></h3>
+<ul>
+<li><strong>Two-Plane Architecture:</strong> Go for control; Java/Vert.x for data.</li>
+<li><strong>Decoupled Adapter Controller:</strong> <code>eventing-autoscaler-keda</code> bridges Knative and KEDA.</li>
+<li><strong>Asymmetric Scaling Model:</strong> Only the dispatcher is scaled with KEDA.</li>
+</ul>
+<h3><strong>Strategic Recommendations</strong></h3>
+<ul>
+<li>Adopt layered tuning: default first, then tune.</li>
+<li>Use isolated data planes for multi-tenancy.</li>
+<li>Implement end-to-end monitoring:<ul>
+<li>Kafka consumer group lag</li>
+<li>Event latency</li>
+<li>Controller logs</li>
+</ul>
+</li>
+</ul>
+<h3><strong>Future Outlook</strong></h3>
+<p>Knative and KEDA integration represents a strong trend toward application-aware autoscaling.</p>
+<hr>
+<h2><strong>Works Cited</strong></h2>
+<ol>
+<li>Knative Apache Kafka Broker with Isolated Data Plane – <a href="https://knative.dev/blog/articles/kafka-broker-with-isolated-data-plane/">knative.dev</a></li>
+<li>About Apache Kafka Broker – <a href="https://knative.dev/docs/eventing/brokers/broker-types/kafka-broker/">knative.dev</a></li>
+<li><a href="https://github.com/knative-extensions/eventing-kafka-broker">knative-extensions/eventing-kafka-broker</a></li>
+<li><a href="https://github.com/knative-sandbox/eventing-kafka-broker/blob/main/docs/channel/README.md">eventing-kafka-broker/docs/channel/README.md</a></li>
+<li><a href="https://github.com/knative-extensions/eventing-kafka-broker/blob/main/data-plane/config/channel/100-config-kafka-channel-data-plane.yaml">100-config-kafka-channel-data-plane.yaml</a></li>
+<li><a href="https://knative.dev/docs/serving/autoscaling/">About autoscaling – Knative</a></li>
+<li><a href="https://knative.dev/docs/serving/autoscaling/autoscaler-types/">Supported autoscaler types – Knative</a></li>
+<li><a href="https://github.com/knative-extensions/eventing-kafka-broker/issues/3995">kafka-broker-dispatcher StatefulSet descriptor issue</a></li>
+<li><a href="https://github.com/knative-extensions/eventing-autoscaler-keda">KEDA support for Knative Event Sources Autoscaling</a></li>
+<li><a href="https://knative.dev/docs/eventing/configuration/keda-configuration/">Configure KEDA Autoscaling of Knative Kafka Resources</a></li>
+<li><a href="https://keda.sh/">KEDA – Kubernetes Event-driven Autoscaling</a></li>
+<li><a href="https://keda.sh/docs/2.7/concepts/">KEDA Concepts</a></li>
+<li><a href="https://www.redhat.com/tracks/_pfcdn/assets/10330/contents/394544/3e378991-2ed1-4057-a962-60">Event-driven Autoscaling through KEDA and Knative Integration – Red Hat</a></li>
+<li><a href="https://turbaszek.medium.com/application-scalability-part-3-knative-and-keda-6d277a8b">Application Scalability, Part 3: Knative and KEDA – Medium</a></li>
+<li><a href="https://pkg.go.dev/knative.dev/eventing-autoscaler-keda/pkg/reconciler/keda">keda package – knative.dev/eventing-autoscaler-keda/pkg/reconciler/keda</a></li>
+<li><a href="https://knative.dev/docs/eventing/brokers/broker-types/kafka-broker/configuring-kafka-features/">Configuring Kafka features – Knative</a></li>
+<li><a href="https://stackoverflow.com/questions/73688710/increase-number-of-events-sen">Increase number of events sent by Knative Kafka broker to Knative Service – Stack Overflow</a></li>
+<li><a href="https://dev.to/cheviana/knative-switchboard-series-part-1-setup-knative-even">Setup Knative Eventing with Kafka from scratch</a></li>
+<li><a href="https://knative.dev/docs/eventing/sources/kafka-source/">Apache Kafka Source – Knative</a></li>
+<li><a href="https://knative.dev/docs/">Knative: Home</a></li>
+<li><a href="https://github.com/knative-sandbox/eventing-kafka-broker/releases">Releases – knative-extensions/eventing-kafka-broker</a></li>
+<li><a href="https://www.syntio.net/en/labs-musings/handling-kafka-events-with-knative/">Handling Kafka Events with Knative – Syntio</a></li>
+<li><a href="https://github.com/kserve/kserve/issues/3561">Native integration with KEDA for LLM inference autoscaling – GitHub</a></li>
+</ol>
+
+</body>
+</html>

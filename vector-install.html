@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vector-install</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Vector Troubleshooting and Deployment Guide</h1>
+<p>This guide contains practical commands and procedures for troubleshooting and deploying Vector based on operational experience.</p>
+<h2>Deployment Commands</h2>
+<h3>Helm Operations</h3>
+<pre><code class="language-bash"># List Vector deployments
+helm ls -A | grep vector
+
+# Get current configuration values
+helm get values -n vector vector &gt; vector-k8s-values.yaml
+helm get values -n vector vector-efs &gt; vector-vna-values.yaml
+
+# Deploy/upgrade Vector instances
+helm upgrade vector vector/vector --namespace vector --values vector-k8s-values.yaml
+helm upgrade vector-efs vector/vector --namespace vector --values vector-vna-values.yaml
+
+# Get deployed manifests
+helm get manifest vector -n vector &gt; vector-manifest.yaml
+
+# Dry run deployment to check changes
+helm upgrade vector-efs vector/vector -n vector -f vector-vna-values.yaml --dry-run --debug
+
+# Compare configuration changes
+helm diff upgrade vector-efs vector/vector -n vector -f vector-vna-values.yaml
+</code></pre>
+<h3>Vector-Specific Kubectl Operations</h3>
+<pre><code class="language-bash"># Get Vector pods by instance (useful for multi-instance deployments)
+kubectl get pods -n vector -l app.kubernetes.io/instance=vector-efs
+
+# Get Vector services with specific labels
+kubectl get svc -n vector -l &#39;app.kubernetes.io/name=vector,app.kubernetes.io/instance=vector-efs&#39;
+
+# Vector DaemonSet specific operations
+kubectl get daemonsets -n vector
+kubectl logs daemonsets/vector-efs --all-containers --ignore-errors --timestamps
+</code></pre>
+<h2>Troubleshooting Commands</h2>
+<h3>Vector-Specific Log Analysis</h3>
+<pre><code class="language-bash"># Vector JSON log parsing for application-specific logs
+kubectl logs -n vector vector-efs-0 | jq -R &#39;fromjson? | select(.application | test(&quot;db-store-v5-deployment&quot;)) | .message&#39;
+kubectl logs -n vector vector-efs-0 | awk -F: &#39;/{&quot;application&quot;/{print $2}&#39; | sort | uniq -c
+
+# Count specific events across all Vector pods
+for pod in $(kubectl get po -n vector | awk &#39;/efs/{print $1}&#39;); do
+  echo &quot;=== $pod ===&quot;
+  kubectl logs -n vector $pod | grep &quot;DB Store operation completed&quot; | wc -l
+done
+</code></pre>
+<h3>Vector Container Debugging</h3>
+<pre><code class="language-bash"># Access Vector&#39;s view of Kubernetes logs
+kubectl exec -n vector vector-efs-0 -- cat /var/log/pods/&lt;namespace&gt;_&lt;app&gt;-deployment-*/app/0.log
+
+# Search logs directly from Vector&#39;s log mount
+kubectl exec -n vector vector-efs-0 -- sh -c &#39;grep -hF &quot;DB Store operation completed&quot; /var/log/containers/db-store*log*&#39;
+
+# Copy Vector&#39;s processed logs for analysis
+kubectl cp vector-efs-0:/var/log/pods/&lt;namespace&gt;_&lt;app&gt;-deployment-*/app/* . -n vector
+</code></pre>
+<h3>Vector Tap Commands</h3>
+<pre><code class="language-bash"># Monitor Vector data flow
+kubectl exec -it vector-efs-0 -- vector tap --outputs-of kubernetes_logs --inputs-of dbstore_metric --quiet --format json --limit 1000 --interval 100
+
+kubectl exec -it vector-efs-0 -- vector tap --outputs-of raw_logs --limit 5000 | grep &quot;DB Store operation completed&quot; | wc -l
+
+kubectl exec -it vector-efs-0 -- vector tap --outputs-of dedupe_logs --limit 5000 | grep &quot;DB Store operation completed&quot; | wc -l
+
+# List all available components for tapping
+kubectl exec -it vector-efs-0 -- vector tap --list
+
+# Monitor specific transform or sink
+kubectl exec -it vector-efs-0 -- vector tap --outputs-of aws_s3 --format json
+kubectl exec -it vector-efs-0 -- vector tap --inputs-of dedupe_logs --format json
+</code></pre>
+<h2>Port Forwarding and Metrics</h2>
+<h3>Port Forward Setup</h3>
+<pre><code class="language-bash"># Port forward to Vector metrics endpoint
+kubectl port-forward -n vector svc/vector 9598:9598
+kubectl port-forward -n vector svc/vector-efs 9598:9598
+
+# Port forward to specific pod
+VECTOR_POD=$(kubectl get pods -n vector -l app.kubernetes.io/name=vector -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+kubectl port-forward -n vector pod/$VECTOR_POD 9598:9598
+
+# Background port forwarding
+kubectl port-forward -n vector svc/vector-efs 9598:9598 &amp;
+</code></pre>
+<h3>Metrics Collection</h3>
+<pre><code class="language-bash"># Basic metrics queries
+curl -s http://localhost:9598/metrics | grep vector_
+curl -s http://localhost:9598/metrics | grep vector_events
+curl -s http://localhost:9598/metrics | grep vector_events_dropped_total
+
+# Specific metrics patterns
+curl -s http://localhost:9598/metrics | grep -E &#39;vector_&#39;
+curl -s http://localhost:9598/metrics | head -n 50
+</code></pre>
+<h2>Monitoring Setup</h2>
+<h3>ServiceMonitor Management</h3>
+<pre><code class="language-bash"># Get ServiceMonitor resources
+kubectl get servicemonitor -n vector
+kubectl get servicemonitor -n vector -o yaml
+
+# Apply ServiceMonitor configurations
+kubectl apply -f vector-k8s-metrics.yaml
+kubectl apply -f vector-vna-metrics.yaml
+
+# Edit ServiceMonitor
+kubectl edit servicemonitors.monitoring.coreos.com vector-efs-metrics -n vector
+
+# Export ServiceMonitor configurations
+kubectl get servicemonitors.monitoring.coreos.com -n vector vector-metrics -o yaml | kubectl neat &gt; vector-k8s-metrics.yaml
+kubectl get servicemonitors.monitoring.coreos.com -n vector vector-efs-metrics -o yaml | kubectl neat &gt; vector-vna-metrics.yaml
+</code></pre>
+<h3>Prometheus Integration</h3>
+<pre><code class="language-bash"># Check Prometheus targets
+echo &quot;Visit http://localhost:9090/targets and look for &#39;serviceMonitor/vector/vector-metrics&#39;&quot;
+
+# Check Prometheus logs for Vector
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus | grep -i &quot;vector\|servicemonitor&quot; | tail -10
+
+# Port forward to Prometheus
+kubectl -n monitoring port-forward prometheus-amp-agent-kube-prometheus-prometheus-0 9090:9090
+</code></pre>
+<h2>Vector-Specific Resource Management</h2>
+<h3>Vector Service Account for S3</h3>
+<pre><code class="language-bash"># Check Vector S3 service account configuration
+kubectl get sa -n vector s3-sa -o yaml
+
+# Verify service labels for ServiceMonitor discovery
+kubectl get service -n vector -l app.kubernetes.io/instance=vector-efs --show-labels
+</code></pre>
+<h2>Configuration Management</h2>
+<h3>Values File Management</h3>
+<pre><code class="language-bash"># Validate YAML syntax
+yamllint vector-k8s-values.yaml
+yamllint vector-vna-values.yaml
+</code></pre>
+<h2>Diagnostic Scripts</h2>
+<h2>Common Issues and Solutions</h2>
+<h3>Metrics Not Appearing</h3>
+<ul>
+<li>Verify ServiceMonitor configuration</li>
+<li>Check port forwarding: <code>kubectl port-forward -n vector svc/vector-efs 9598:9598</code></li>
+<li>Test metrics endpoint: <code>curl -s http://localhost:9598/metrics</code></li>
+<li>Ensure Prometheus can reach the Vector service</li>
+<li>Check ServiceMonitor selector labels match Vector service labels</li>
+</ul>
+<h3>Log Processing Issues</h3>
+<ul>
+<li>Use Vector tap commands to monitor data flow</li>
+<li>Check for errors in Vector logs</li>
+<li>Verify source configurations in values files</li>
+<li><strong>Important</strong>: Check Vector internal metrics for dropped events:<pre><code class="language-bash">curl -s http://localhost:9598/metrics | grep vector_component_discarded_events_total
+curl -s http://localhost:9598/metrics | grep vector_component_errors_total
+</code></pre>
+</li>
+</ul>
+<h3>Vector Configuration Validation</h3>
+<ul>
+<li>Test Vector config syntax before deployment:<pre><code class="language-bash">kubectl exec -it vector-efs-0 -- vector validate --config-dir /etc/vector
+</code></pre>
+</li>
+<li>Visualize Vector component topology:<pre><code class="language-bash">kubectl exec -it vector-efs-0 -- vector graph --config-dir /etc/vector
+</code></pre>
+</li>
+</ul>
+<h3>Performance Issues</h3>
+<ul>
+<li>Monitor buffer usage:<pre><code class="language-bash">curl -s http://localhost:9598/metrics | grep vector_buffer
+</code></pre>
+</li>
+<li>Check throughput metrics:<pre><code class="language-bash">curl -s http://localhost:9598/metrics | grep -E &quot;vector_component_(received|sent)_events_total&quot;
+</code></pre>
+</li>
+</ul>
+<h3>S3 Upload Issues</h3>
+<ul>
+<li>Check service account annotations for IAM role</li>
+<li>Verify bucket permissions and region settings</li>
+<li>Monitor Vector logs for S3-specific errors</li>
+</ul>
+
+</body>
+</html>

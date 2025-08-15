@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>net-tools-pod</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Network Tools Pod</h1>
+<p>Comprehensive Kubernetes debugging pod with network analysis tools</p>
+<h2>Overview</h2>
+<p>The Network Tools Pod is a privileged Kubernetes pod designed for network debugging and troubleshooting. It comes pre-installed with essential network analysis tools, cloud APIs, and debugging utilities.</p>
+<p><strong>Security Notice:</strong> This pod runs with privileged access and host networking. Use only in development/staging environments or for authorized debugging purposes.</p>
+<h2>Features</h2>
+<ul>
+<li><strong>Network Analysis</strong>: ping, dig, nmap, tcpdump, traceroute, netcat, mtr</li>
+<li><strong>Load Testing</strong>: hey for HTTP load testing</li>
+<li><strong>Cloud APIs</strong>: awscurl, Azure REST API tools</li>
+<li><strong>Protocol Testing</strong>: grpcurl for gRPC APIs, socat for socket relay</li>
+<li><strong>Packet Analysis</strong>: tshark, ngrep for advanced packet inspection</li>
+<li><strong>System Tools</strong>: vim, jq, curl, wget, python3</li>
+</ul>
+<h2>Pod Configuration</h2>
+<pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: network-debug-pod
+  namespace: default
+  labels:
+    app: network-debug
+    purpose: troubleshooting
+spec:
+  hostNetwork: true
+  restartPolicy: Never
+  
+  containers:
+  - name: network-debug
+    image: ubuntu:22.04
+    imagePullPolicy: IfNotPresent
+    
+    command: [&quot;/bin/bash&quot;]
+    args: [&quot;-c&quot;, &quot;sleep infinity&quot;]
+    
+    securityContext:
+      privileged: true
+      capabilities:
+        add:
+        - NET_ADMIN
+        - NET_RAW
+        - SYS_ADMIN
+    
+    lifecycle:
+      postStart:
+        exec:
+          command:
+          - /bin/bash
+          - -c
+          - |
+            # Update and install network tools
+            apt-get update
+            apt-get install -y \
+              curl wget net-tools dnsutils iputils-ping \
+              tcpdump nmap traceroute netcat-openbsd \
+              telnet whois mtr-tiny jq vim \
+              iproute2 iptables ethtool \
+              socat ngrep tshark \
+              python3 python3-pip unzip
+            
+            # Install awscurl for AWS API calls
+            pip3 install awscurl
+            
+            # Install Azure REST API helper
+            pip3 install requests azure-identity
+            
+            # Install hey for load testing
+            curl -L https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64 -o /usr/local/bin/hey
+            chmod +x /usr/local/bin/hey
+            
+            # Install grpcurl
+            curl -L https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin/
+            
+            # Create simple aliases
+            cat &gt; /root/.bashrc &lt;&lt; &#39;EOF&#39;
+            alias ll=&#39;ls -la&#39;
+            alias ports=&#39;netstat -tuln&#39;
+            alias connections=&#39;ss -tuln&#39;
+            alias routes=&#39;ip route show&#39;
+            alias interfaces=&#39;ip addr show&#39;
+            
+            echo &quot;Network debugging tools ready!&quot;
+            echo &quot;AWS: awscurl&quot;
+            echo &quot;Azure: curl with requests/azure-identity&quot;  
+            echo &quot;Load testing: hey&quot;
+            echo &quot;Network: ping, dig, nmap, tcpdump, traceroute, etc.&quot;
+            EOF
+            
+            source /root/.bashrc
+    
+    resources:
+      requests:
+        memory: &quot;128Mi&quot;
+        cpu: &quot;50m&quot;
+      limits:
+        memory: &quot;512Mi&quot;
+        cpu: &quot;500m&quot;
+</code></pre>
+<h2>Usage</h2>
+<h3>Deploy the Pod</h3>
+<pre><code class="language-bash"># Apply the pod configuration
+kubectl apply -f net-tools-pod.yaml
+
+# Wait for pod to be ready
+kubectl wait --for=condition=Ready pod/network-debug-pod --timeout=300s
+</code></pre>
+<h3>Access the Pod</h3>
+<pre><code class="language-bash"># Execute into the pod
+kubectl exec -it network-debug-pod -- /bin/bash
+
+# Check pod status
+kubectl get pod network-debug-pod
+kubectl describe pod network-debug-pod
+</code></pre>
+<h2>Common Debugging Tasks</h2>
+<h3>Network Connectivity</h3>
+<pre><code class="language-bash"># Test basic connectivity
+ping google.com
+ping -c 4 8.8.8.8
+
+# DNS resolution
+dig kubernetes.default.svc.cluster.local
+nslookup google.com
+
+# Trace network path
+traceroute google.com
+mtr google.com
+</code></pre>
+<h3>Port and Service Testing</h3>
+<pre><code class="language-bash"># Check open ports
+netstat -tuln
+ss -tuln
+
+# Test service connectivity
+nc -zv service-name 80
+telnet service-name 443
+
+# Scan for open ports
+nmap -p 1-1000 target-host
+</code></pre>
+<h3>HTTP/API Testing</h3>
+<pre><code class="language-bash"># Basic HTTP requests
+curl -v https://api.example.com/health
+wget -O- https://api.example.com/status
+
+# Load testing with hey
+hey -n 1000 -c 10 https://api.example.com/endpoint
+
+# gRPC testing
+grpcurl -plaintext service:9090 list
+grpcurl -plaintext service:9090 package.Service/Method
+</code></pre>
+<h3>Packet Capture and Analysis</h3>
+<pre><code class="language-bash"># Capture packets
+tcpdump -i any -w capture.pcap host target-host
+tcpdump -i any port 80
+
+# Real-time packet analysis
+tshark -i any -f &quot;host target-host&quot;
+ngrep -q -W byline &quot;GET|POST&quot; tcp port 80
+</code></pre>
+<h3>Cloud API Testing</h3>
+<pre><code class="language-bash"># AWS API calls (requires credentials)
+awscurl --service ec2 --region us-east-1 &#39;https://ec2.us-east-1.amazonaws.com/?Action=DescribeInstances&amp;Version=2016-11-15&#39;
+
+# Using standard curl with AWS SigV4
+curl -H &quot;Authorization: AWS4-HMAC-SHA256 ...&quot; https://service.region.amazonaws.com/
+</code></pre>
+<h3>Network Interface Analysis</h3>
+<pre><code class="language-bash"># View network interfaces
+ip addr show
+interfaces  # alias for ip addr show
+
+# Check routing table
+ip route show
+routes      # alias for ip route show
+
+# Network statistics
+ethtool eth0
+cat /proc/net/dev
+</code></pre>
+<h2>Built-in Aliases</h2>
+<p>The pod includes several useful aliases for quick access:</p>
+<ul>
+<li><code>ll</code> - List files in long format</li>
+<li><code>ports</code> - Show listening ports (netstat -tuln)</li>
+<li><code>connections</code> - Show socket connections (ss -tuln)</li>
+<li><code>routes</code> - Display routing table</li>
+<li><code>interfaces</code> - Show network interfaces</li>
+</ul>
+<h2>Cleanup</h2>
+<pre><code class="language-bash"># Remove the pod
+kubectl delete pod network-debug-pod
+
+# Or delete using the YAML file
+kubectl delete -f net-tools-pod.yaml
+</code></pre>
+<h2>Security Considerations</h2>
+<ul>
+<li>The pod runs with <code>privileged: true</code> and has elevated capabilities</li>
+<li>Uses <code>hostNetwork: true</code> which shares the host&#39;s network namespace</li>
+<li>Should only be used in development/staging environments</li>
+<li>Remove the pod immediately after debugging is complete</li>
+<li>Consider using network policies to restrict pod communication if deployed in production</li>
+</ul>
+<h2>Troubleshooting</h2>
+<ul>
+<li>If pod fails to start, check node resources and security policies</li>
+<li>Tool installation happens via postStart hook - allow time for completion</li>
+<li>Some tools may require additional configuration for cloud provider environments</li>
+<li>Network policies may restrict pod connectivity in some clusters</li>
+</ul>
+
+</body>
+</html>

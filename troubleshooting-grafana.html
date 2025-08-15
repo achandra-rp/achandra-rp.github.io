@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>troubleshooting-grafana</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Grafana &amp; Prometheus Query Reference</h1>
+<p>This document contains all the queries used during the troubleshooting to diagnose and fix the multi-cluster vector monitoring setup.</p>
+<h2>Environment Setup</h2>
+<ul>
+<li><strong>Grafana URL</strong>: <code>https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com</code></li>
+<li><strong>AMP Workspace</strong>: <code>&lt;amp-workspace-id&gt;</code></li>
+<li><strong>Clusters</strong>: <code>&lt;cluster-name-1&gt;</code>, <code>&lt;cluster-name-2&gt;</code></li>
+</ul>
+<h2>Grafana API Queries</h2>
+<h3>1. Dashboard Discovery</h3>
+<pre><code class="language-bash"># Search for vector-related dashboards
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/search?query=vector&quot;
+</code></pre>
+<h3>2. Datasource Information</h3>
+<pre><code class="language-bash"># Get available datasources
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources&quot;
+</code></pre>
+<h3>3. Label Value Queries (via Grafana Proxy to AMP)</h3>
+<h4>Check Vector Instances</h4>
+<pre><code class="language-bash"># Get all vector_instance label values
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values&quot;
+</code></pre>
+<h4>Check Available Clusters</h4>
+<pre><code class="language-bash"># Get all cluster label values
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values&quot;
+</code></pre>
+<h4>Check Vector Jobs</h4>
+<pre><code class="language-bash"># Get all job labels containing &quot;vector&quot;
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/job/values&quot; | \
+  jq &#39;.data[] | select(test(&quot;vector&quot;))&#39;
+</code></pre>
+<h3>4. Dashboard Configuration Queries</h3>
+<h4>Get Dashboard Variable Configuration</h4>
+<pre><code class="language-bash"># Get vector_instance variable configuration from dashboard
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/dashboards/uid/vector_multienv_dashboard&quot; | \
+  jq &#39;.dashboard.templating.list[] | select(.name==&quot;vector_instance&quot;)&#39;
+</code></pre>
+<h2>Prometheus Queries (via Grafana Proxy)</h2>
+<h3>1. Basic Health Checks</h3>
+<h4>Check Service Availability</h4>
+<pre><code class="language-bash"># Check if specific services are up
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up%7Bjob%3D~%22.*&lt;cluster-name-mw&gt;.*%22%7D&quot;
+</code></pre>
+<h4>Check Vector Started Status</h4>
+<pre><code class="language-bash"># Verify vector instances are running
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total&quot;
+</code></pre>
+<h3>2. Vector-Specific Metrics</h3>
+<h4>Vector Component Events</h4>
+<pre><code class="language-bash"># Check if vector components are receiving events
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_component_received_events_total&quot;
+</code></pre>
+<h4>Filter by Cluster</h4>
+<pre><code class="language-bash"># Get metrics from specific cluster with data freshness
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total&quot; | \
+  jq --argjson current_time $(date +%s) \
+  &#39;.data.result[] | select(.metric.cluster == &quot;&lt;cluster-name-mw&gt;&quot; or .metric.cluster == &quot;&lt;cluster-name-se&gt;&quot;) |
+   {cluster: .metric.cluster, vector_instance: .metric.vector_instance, age_seconds: ($current_time - .value[0])}&#39;
+</code></pre>
+<h3>3. Data Quality Checks</h3>
+<h4>Check Data Freshness</h4>
+<pre><code class="language-bash"># Verify data is recent (age in seconds)
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up&quot; | \
+  jq --argjson current_time $(date +%s) \
+  &#39;.data.result[] | select(.metric.job | contains(&quot;&lt;cluster-name-mw&gt;&quot;)) |
+   {job: .metric.job, cluster: .metric.cluster, age_seconds: ($current_time - .value[0])}&#39;
+</code></pre>
+<h4>Verify Event Processing</h4>
+<pre><code class="language-bash"># Check if vector components have processed events
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_component_received_events_total&quot; | \
+  jq &#39;.data.result[] | select(.metric.cluster == &quot;&lt;cluster-name-mw&gt;&quot; or .metric.cluster == &quot;&lt;cluster-name-se&gt;&quot;) | 
+      {cluster: .metric.cluster, vector_instance: .metric.vector_instance, job: .metric.job, has_data: (.value[1] | tonumber &gt; 0)}&#39;
+</code></pre>
+<h3>4. Dashboard Variable Validation</h3>
+<h4>Test Dashboard Query</h4>
+<pre><code class="language-bash"># Test the exact query used by dashboard variables
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values?match[]=vector_component_received_events_total&quot; | \
+  jq &#39;.data[] | select(contains(&quot;&lt;cluster-name-mw&gt;&quot;) or contains(&quot;&lt;cluster-name-se&gt;&quot;))&#39;
+</code></pre>
+<h2>Direct Prometheus Queries (kubectl port-forward)</h2>
+<h3>1. Local Prometheus Access</h3>
+<pre><code class="language-bash"># Port forward to local Prometheus instance
+kubectl port-forward -n monitoring svc/amp-agent-kube-prometheus-prometheus 9090:9090 &amp;
+</code></pre>
+<h3>2. Target Discovery</h3>
+<pre><code class="language-bash"># Check Prometheus targets
+curl -s &quot;http://localhost:9090/api/v1/targets&quot; | \
+  jq &#39;.data.activeTargets[] | select(.labels.job | contains(&quot;vector&quot;)) | 
+      {job: .labels.job, instance: .labels.instance, health: .health, lastScrape: .lastScrape}&#39;
+</code></pre>
+<h3>3. Configuration Validation</h3>
+<pre><code class="language-bash"># Check Prometheus configuration
+curl -s &quot;http://localhost:9090/api/v1/status/config&quot; | \
+  jq &#39;.data.yaml&#39; | grep -A 5 -B 5 &quot;kubernetes_sd_configs&quot;
+</code></pre>
+<h3>4. Metric Availability</h3>
+<pre><code class="language-bash"># List all available metric names
+curl -s &quot;http://localhost:9090/api/v1/label/__name__/values&quot; | \
+  jq &#39;.data[] | select(test(&quot;vector&quot;))&#39;
+</code></pre>
+<h3>5. Label Value Queries</h3>
+<pre><code class="language-bash"># Get unique vector instances
+curl -s &quot;http://localhost:9090/api/v1/query?query=vector_started_total&quot; | \
+  jq &#39;.data.result[] | select(.metric.job | test(&quot;vector.*edge&quot;)) | 
+      {job: .metric.job, vector_instance: .metric.vector_instance, cluster: .metric.cluster}&#39;
+</code></pre>
+<h2>Kubernetes Cluster Queries</h2>
+<h3>1. Service Monitor Validation</h3>
+<pre><code class="language-bash"># Check service monitors in vector namespace
+kubectl get servicemonitors.monitoring.coreos.com -n vector
+
+# Get service monitor details
+kubectl get servicemonitor vector-k8s-edge-metrics -n vector -o yaml | grep -A 3 -B 3 &quot;vector_instance&quot;
+</code></pre>
+<h3>2. Prometheus Configuration</h3>
+<pre><code class="language-bash"># Check Prometheus remote write configuration
+kubectl get prometheus -n monitoring -o yaml | grep -A 15 remoteWrite
+
+# Check Prometheus service monitor selector
+kubectl get prometheus -n monitoring -o yaml | grep -A 10 serviceMonitorSelector
+</code></pre>
+<h3>3. Pod and Service Status</h3>
+<pre><code class="language-bash"># Check vector services
+kubectl get services -n vector
+
+# Check vector pods
+kubectl get pods -n vector
+
+# Check monitoring namespace
+kubectl get pods -n monitoring
+</code></pre>
+<h3>4. Logs Analysis</h3>
+<pre><code class="language-bash"># Check Prometheus logs for remote write
+kubectl logs -n monitoring prometheus-amp-agent-kube-prometheus-prometheus-0 -c prometheus | \
+  grep -E &quot;(remote|write|storage)&quot;
+
+# Check recent Prometheus activity
+kubectl logs -n monitoring prometheus-amp-agent-kube-prometheus-prometheus-0 -c prometheus --since=2m
+</code></pre>
+<h2>Common PromQL Queries for Vector Monitoring</h2>
+<h3>1. Service Health</h3>
+<pre><code class="language-promql"># Check if vector services are up
+up{job=~&quot;vector.*metrics&quot;}
+
+# Vector instances that are running
+vector_started_total
+</code></pre>
+<h3>2. Event Processing</h3>
+<pre><code class="language-promql"># Events received by components
+vector_component_received_events_total
+
+# Events sent by components
+vector_component_sent_events_total
+
+# Event processing rate
+rate(vector_component_received_events_total[5m])
+</code></pre>
+<h3>3. Performance Metrics</h3>
+<pre><code class="language-promql"># Memory buffer usage
+vector_buffer_byte_size{buffer_type=&quot;memory&quot;}
+
+# Events in buffer
+vector_buffer_events{buffer_type=&quot;memory&quot;}
+
+# Source lag time
+rate(vector_source_lag_time_seconds_sum[5m]) / rate(vector_source_lag_time_seconds_count[5m])
+</code></pre>
+<h3>4. Multi-Cluster Queries</h3>
+<pre><code class="language-promql"># Compare metrics across clusters
+vector_component_received_events_total{cluster=~&quot;&lt;cluster-name-se&gt;|&lt;cluster-name-mw&gt;&quot;}
+
+# Cluster-specific filtering
+vector_started_total{cluster=&quot;&lt;cluster-name-mw&gt;&quot;}
+
+# Environment and deployment filtering
+vector_component_received_events_total{environment=&quot;edge&quot;,deployment=~&quot;k8s|vna&quot;}
+</code></pre>
+<h2>Troubleshooting Queries</h2>
+<h3>1. Missing Data Investigation</h3>
+<pre><code class="language-bash"># Check if cluster appears in metrics
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values&quot;
+
+# Search for any metrics from specific cluster
+curl -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=up%7Bcluster%3D%22&lt;cluster-name-mw&gt;%22%7D&quot;
+</code></pre>
+<h3>2. Service Discovery Issues</h3>
+<pre><code class="language-bash"># Check if services are being discovered
+kubectl get servicemonitors -A | grep vector
+
+# Verify service monitor labels match Prometheus selector
+kubectl get prometheus -n monitoring -o yaml | grep -A 5 serviceMonitorSelector
+</code></pre>
+<h3>3. Remote Write Validation</h3>
+<pre><code class="language-bash"># Check remote write configuration exists
+kubectl get prometheus -n monitoring -o yaml | grep -A 10 remoteWrite
+
+# Verify AMP workspace URL is correct
+kubectl get prometheus -n monitoring -o yaml | grep &quot;aps-workspaces&quot;
+</code></pre>
+<h2>Quick Reference Commands</h2>
+<pre><code class="language-bash"># Check cluster data availability
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/cluster/values&quot;
+
+# Verify vector instances
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/label/vector_instance/values&quot;
+
+# Test data freshness
+curl -s -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  &quot;https://&lt;grafana-workspace-id&gt;.grafana-workspace.&lt;region&gt;.amazonaws.com/api/datasources/proxy/1/api/v1/query?query=vector_started_total&quot; | \
+  jq --argjson current_time $(date +%s) &#39;.data.result[] | {cluster: .metric.cluster, age_seconds: ($current_time - .value[0])}&#39;
+</code></pre>
+
+</body>
+</html>

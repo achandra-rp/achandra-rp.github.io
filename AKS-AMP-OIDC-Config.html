@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AKS-AMP-OIDC-Config</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        pre code { background: none; padding: 0; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        h1, h2, h3 { color: #333; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Authenticating AKS with AWS Managed Prometheus (AMP) using OIDC</h1>
+<p>This guide provides step-by-step instructions to securely configure an Azure Kubernetes Service (AKS) cluster to send metrics to an AWS Managed Service for Prometheus (AMP) workspace. It uses the recommended OIDC federation method, which avoids static credentials.</p>
+<h3>Prerequisites</h3>
+<ul>
+<li>An active Azure subscription with an AKS cluster.</li>
+<li>An active AWS account with an AMP workspace.</li>
+<li><code>az</code> (Azure CLI) installed and configured.</li>
+<li><code>kubectl</code> installed and configured to connect to your AKS cluster.</li>
+</ul>
+<hr>
+<h3>Step 1: Configure AKS and Get the OIDC Issuer URL</h3>
+<p>First, enable both the OIDC issuer and workload identity on your AKS cluster and retrieve its public URL.</p>
+<ol>
+<li><p><strong>Enable OIDC Issuer and Workload Identity:</strong></p>
+<pre><code class="language-bash">az aks update --name &lt;MyAKSCluster&gt; --resource-group &lt;MyResourceGroup&gt; --enable-oidc-issuer --enable-workload-identity
+</code></pre>
+</li>
+<li><p><strong>Get the Issuer URL:</strong> Copy this URL for the next steps.</p>
+<pre><code class="language-bash">az aks show --name &lt;MyAKSCluster&gt; --resource-group &lt;MyResourceGroup&gt; --query &quot;oidcIssuerProfile.issuerUrl&quot; -o tsv
+</code></pre>
+</li>
+<li><p><strong>Verify Workload Identity is Enabled:</strong></p>
+<p>Check for the workload identity webhook pods:</p>
+<pre><code class="language-bash">kubectl get pods -n kube-system | grep azure-wi-webhook
+</code></pre>
+<p>You should see pods with names like <code>azure-wi-webhook-controller-manager-xxxx-xxxxx</code>.</p>
+<p>Also verify the mutating webhook configuration:</p>
+<pre><code class="language-bash">kubectl get mutatingwebhookconfigurations | grep azure-wi-webhook
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3>Step 2: Create the IAM OIDC Provider and Role in AWS</h3>
+<p>Configure AWS to trust your AKS cluster and create a role with specific permissions.</p>
+<ol>
+<li><p><strong>Create an IAM OIDC Provider:</strong></p>
+<p><strong>Option A: Using AWS Console</strong></p>
+<ul>
+<li>In the AWS IAM Console, go to <strong>Identity providers</strong> and click <strong>Add provider</strong>.</li>
+<li><strong>Provider type</strong>: <code>OpenID Connect</code>.</li>
+<li><strong>Provider URL</strong>: Paste the AKS issuer URL from Step 1.</li>
+<li><strong>Audience</strong>: Enter exactly <code>sts.amazonaws.com</code>.</li>
+<li>Click <strong>Get thumbprint</strong> and <strong>Add provider</strong>.</li>
+</ul>
+<p><strong>Option B: Using AWS CLI</strong></p>
+<pre><code class="language-bash"># Extract the host from your AKS issuer URL (remove https:// and trailing path)
+ISSUER_HOST=$(echo &quot;&lt;your-aks-issuer-url&gt;&quot; | sed &#39;s|https://||&#39; | sed &#39;s|/.*||&#39;)
+
+# Get the thumbprint
+THUMBPRINT=$(echo | openssl s_client -servername $ISSUER_HOST -connect $ISSUER_HOST:443 2&gt;/dev/null | openssl x509 -fingerprint -noout -sha1 | sed &#39;s/://g&#39; | sed &#39;s/.*=//&#39;)
+
+# Create the OIDC provider
+aws iam create-open-id-connect-provider \
+  --url &quot;&lt;your-aks-issuer-url&gt;&quot; \
+  --client-id-list &quot;sts.amazonaws.com&quot; \
+  --thumbprint-list $THUMBPRINT
+</code></pre>
+<p><strong>If thumbprint auto-retrieval fails</strong>, manually get it:</p>
+<pre><code class="language-bash"># Replace &lt;issuer-host&gt; with your AKS issuer hostname
+echo | openssl s_client -servername &lt;issuer-host&gt; -connect &lt;issuer-host&gt;:443 2&gt;/dev/null | openssl x509 -fingerprint -noout -sha1 | sed &#39;s/://g&#39; | sed &#39;s/.*=//&#39;
+</code></pre>
+</li>
+<li><p><strong>Create an IAM Role:</strong></p>
+<ul>
+<li>In the IAM Console, go to <strong>Roles</strong> and click <strong>Create role</strong>.</li>
+<li><strong>Trusted entity type</strong>: <code>Web identity</code>.</li>
+<li><strong>Identity provider</strong>: Choose the OIDC provider you just created.</li>
+<li><strong>Audience</strong>: Select <code>sts.amazonaws.com</code>.</li>
+<li><strong>Permissions Policy</strong>: Create a new policy with the following JSON, which allows writing to your AMP workspace.<pre><code class="language-json">{
+    &quot;Version&quot;: &quot;2012-10-17&quot;,
+    &quot;Statement&quot;: [
+        {
+            &quot;Effect&quot;: &quot;Allow&quot;,
+            &quot;Action&quot;: &quot;aps:RemoteWrite&quot;,
+            &quot;Resource&quot;: &quot;arn:aws:aps:&lt;aws-region&gt;:&lt;aws-account-id&gt;:workspace/&lt;workspace-id&gt;&quot;
+        }
+    ]
+}
+</code></pre>
+</li>
+<li><strong>Trust Policy</strong>: After creating the role, edit its trust policy to restrict it to a specific Kubernetes service account. This is a critical security step.<pre><code class="language-json">{
+    &quot;Version&quot;: &quot;2012-10-17&quot;,
+    &quot;Statement&quot;: [
+        {
+            &quot;Effect&quot;: &quot;Allow&quot;,
+            &quot;Principal&quot;: {
+                &quot;Federated&quot;: &quot;arn:aws:iam::&lt;aws-account-id&gt;:oidc-provider/&lt;issuer-url-path&gt;&quot;
+            },
+            &quot;Action&quot;: &quot;sts:AssumeRoleWithWebIdentity&quot;,
+            &quot;Condition&quot;: {
+                &quot;StringEquals&quot;: {
+                    &quot;&lt;issuer-url-without-https&gt;/:sub&quot;: &quot;system:serviceaccount:&lt;MyNamespace&gt;:&lt;MyServiceAccountName&gt;&quot;
+                }
+            }
+        }
+    ]
+}
+</code></pre>
+</li>
+<li>Give the role a name (e.g., <code>AKS-Prometheus-AMP-Role</code>) and <strong>copy its ARN</strong>.</li>
+</ul>
+</li>
+<li><p><strong>Validate the OIDC Provider was created correctly:</strong></p>
+<pre><code class="language-bash"># List OIDC providers to verify creation
+aws iam list-open-id-connect-providers
+
+# Get details of your specific provider
+aws iam get-open-id-connect-provider --open-id-connect-provider-arn &quot;arn:aws:iam::&lt;account-id&gt;:oidc-provider/&lt;issuer-host&gt;&quot;
+
+# Verify the thumbprint matches
+aws iam get-open-id-connect-provider --open-id-connect-provider-arn &quot;arn:aws:iam::&lt;account-id&gt;:oidc-provider/&lt;issuer-host&gt;&quot; --query &quot;ThumbprintList&quot;
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3>Step 3: Configure Microsoft Entra ID for Federation</h3>
+<p>Create an Azure AD application and link it to your Kubernetes service account.</p>
+<ol>
+<li><p><strong>Create an AAD Application:</strong></p>
+<pre><code class="language-bash">az ad app create --display-name &quot;Prometheus-AMP-Federation&quot;
+</code></pre>
+</li>
+<li><p><strong>Get the Application&#39;s Object ID:</strong></p>
+<pre><code class="language-bash">az ad app show --id &quot;Prometheus-AMP-Federation&quot; --query &quot;id&quot; -o tsv
+</code></pre>
+<p>Copy the <strong>Object ID</strong> from the output.</p>
+</li>
+<li><p><strong>Create a <code>credential.json</code> file:</strong></p>
+<pre><code class="language-json">{
+    &quot;name&quot;: &quot;aks-prometheus-federation&quot;,
+    &quot;issuer&quot;: &quot;https://&lt;your-aks-issuer-url-from-step-1&gt;/&quot;,
+    &quot;subject&quot;: &quot;system:serviceaccount:&lt;MyNamespace&gt;:&lt;MyServiceAccountName&gt;&quot;,
+    &quot;audiences&quot;: [
+        &quot;api://AzureADTokenExchange&quot;
+    ]
+}
+</code></pre>
+</li>
+<li><p><strong>Create the Federated Credential:</strong></p>
+<pre><code class="language-bash">az ad app federated-credential create --id &lt;your-app-object-id&gt; --parameters credential.json
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3>Step 4: Create and Annotate the Kubernetes Service Account</h3>
+<p>Deploy a service account in AKS that your Prometheus pod will use.</p>
+<ol>
+<li><p><strong>Get the AAD Application&#39;s Client ID:</strong></p>
+<pre><code class="language-bash">az ad app show --id &quot;Prometheus-AMP-Federation&quot; --query &quot;appId&quot; -o tsv
+</code></pre>
+</li>
+<li><p><strong>Create a <code>prometheus-sa.yaml</code> file:</strong></p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: &lt;MyServiceAccountName&gt; # e.g., prometheus-sa
+  namespace: &lt;MyNamespace&gt;       # e.g., monitoring
+  labels:
+    azure.workload.identity/use: &quot;true&quot;
+  annotations:
+    azure.workload.identity/client-id: &lt;your-app-client-id&gt;
+</code></pre>
+</li>
+<li><p><strong>Apply the manifest:</strong></p>
+<pre><code class="language-bash">kubectl apply -f prometheus-sa.yaml
+</code></pre>
+</li>
+<li><p><strong>Verify the service account was created correctly:</strong></p>
+<pre><code class="language-bash"># Check if the service account exists with correct annotations and labels
+kubectl get serviceaccount &lt;MyServiceAccountName&gt; -n &lt;MyNamespace&gt; -o yaml
+
+# Verify the workload identity annotation is present
+kubectl get serviceaccount &lt;MyServiceAccountName&gt; -n &lt;MyNamespace&gt; -o jsonpath=&#39;{.metadata.annotations.azure\.workload\.identity/client-id}&#39;
+
+# Verify the workload identity label is present
+kubectl get serviceaccount &lt;MyServiceAccountName&gt; -n &lt;MyNamespace&gt; -o jsonpath=&#39;{.metadata.labels.azure\.workload\.identity/use}&#39;
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3>Step 5: Configure and Deploy Prometheus</h3>
+<p>Finally, configure your Prometheus instance to use the service account and SigV4 authentication.</p>
+<ol>
+<li><p><strong>Update <code>prometheus.yml</code>:</strong> In your Prometheus ConfigMap, configure the <code>remote_write</code> section.</p>
+<pre><code class="language-yaml">remote_write:
+  - url: &quot;https://aps-workspaces.&lt;aws-region&gt;.amazonaws.com/workspaces/&lt;workspace-id&gt;/api/v1/remote_write&quot;
+    sigv4:
+      region: &lt;aws-region&gt;
+      role_arn: &lt;your-iam-role-arn-from-step-2&gt;
+</code></pre>
+</li>
+<li><p><strong>Update Prometheus Deployment:</strong> Ensure your Prometheus <code>Deployment</code> or <code>StatefulSet</code> uses the service account.</p>
+<pre><code class="language-yaml"># ...
+spec:
+  template:
+    spec:
+      serviceAccountName: &lt;MyServiceAccountName&gt; # Must match the SA you created
+      # ...
+</code></pre>
+</li>
+<li><p><strong>Deploy your Prometheus configuration.</strong> Your metrics should now securely flow from AKS to AWS Managed Prometheus.</p>
+</li>
+<li><p><strong>Check Prometheus logs for authentication issues:</strong></p>
+<pre><code class="language-bash"># Get Prometheus pod name
+PROMETHEUS_POD=$(kubectl get pods -n &lt;MyNamespace&gt; -l app=prometheus -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+
+# View Prometheus logs for authentication errors
+kubectl logs $PROMETHEUS_POD -n &lt;MyNamespace&gt; | grep -i &quot;remote_write\|sigv4\|auth\|error&quot;
+
+# Check if workload identity environment variables are injected
+kubectl exec $PROMETHEUS_POD -n &lt;MyNamespace&gt; -- env | grep -E &quot;AZURE_|AWS_&quot;
+
+# Verify the Azure identity token file exists
+kubectl exec $PROMETHEUS_POD -n &lt;MyNamespace&gt; -- ls -la /var/run/secrets/azure/tokens/
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3>Troubleshooting</h3>
+<p>If you encounter issues with the workload identity setup, follow these troubleshooting steps:</p>
+<ol>
+<li><p><strong>Verify workload identity is enabled on the cluster:</strong></p>
+<pre><code class="language-bash">az aks show --resource-group &lt;MyResourceGroup&gt; --name &lt;MyAKSCluster&gt; --query &quot;securityProfile.workloadIdentity&quot; -o tsv
+</code></pre>
+</li>
+<li><p><strong>Check if both OIDC issuer and workload identity are enabled:</strong></p>
+<pre><code class="language-bash">az aks show --resource-group &lt;MyResourceGroup&gt; --name &lt;MyAKSCluster&gt; --query &quot;{oidcIssuer: oidcIssuerProfile.enabled, workloadIdentity: securityProfile.workloadIdentity.enabled}&quot; -o table
+</code></pre>
+</li>
+<li><p><strong>If they&#39;re not enabled, update your cluster:</strong></p>
+<pre><code class="language-bash">az aks update --resource-group &lt;MyResourceGroup&gt; --name &lt;MyAKSCluster&gt; --enable-oidc-issuer --enable-workload-identity
+</code></pre>
+</li>
+<li><p><strong>Verify the OIDC issuer URL is correct:</strong></p>
+<pre><code class="language-bash">az aks show --resource-group &lt;MyResourceGroup&gt; --name &lt;MyAKSCluster&gt; --query &quot;oidcIssuerProfile.issuerUrl&quot; -o tsv
+</code></pre>
+<p>This should return a URL like <code>https://oidc.prod-aks.azure.com/&lt;cluster-id&gt;/</code>.</p>
+</li>
+</ol>
+<hr>
+<h3>Testing the Configuration</h3>
+<p>To manually test the OIDC federation and AWS role assumption from within a pod:</p>
+<ol>
+<li><p><strong>Set up environment variables inside your pod:</strong></p>
+<pre><code class="language-bash">export AWS_ROLE_ARN=&quot;arn:aws:iam::&lt;aws-account-id&gt;:role/AKS-Prometheus-AMP-Role&quot;
+export AWS_WEB_IDENTITY_TOKEN_FILE=&quot;/var/run/secrets/azure/tokens/azure-identity-token&quot;
+export AWS_DEFAULT_REGION=&quot;&lt;aws-region&gt;&quot;
+</code></pre>
+</li>
+<li><p><strong>Assume the role and get temporary credentials:</strong></p>
+<pre><code class="language-bash">TEMP_CREDS=$(aws sts assume-role-with-web-identity \
+  --role-arn &quot;$AWS_ROLE_ARN&quot; \
+  --role-session-name &quot;aks-to-amp-test&quot; \
+  --web-identity-token &quot;file://$AWS_WEB_IDENTITY_TOKEN_FILE&quot; \
+  --duration-seconds 3600 \
+  --output json)
+</code></pre>
+</li>
+<li><p><strong>Extract and use the credentials:</strong></p>
+<pre><code class="language-bash">export AWS_ACCESS_KEY_ID=$(echo $TEMP_CREDS | jq -r &#39;.Credentials.AccessKeyId&#39;)
+export AWS_SECRET_ACCESS_KEY=$(echo $TEMP_CREDS | jq -r &#39;.Credentials.SecretAccessKey&#39;)
+export AWS_SESSION_TOKEN=$(echo $TEMP_CREDS | jq -r &#39;.Credentials.SessionToken&#39;)
+</code></pre>
+</li>
+<li><p><strong>Test access to AMP workspace:</strong></p>
+<pre><code class="language-bash">awscurl --service aps \
+  --region &lt;aws-region&gt; \
+  &quot;https://aps-workspaces.&lt;aws-region&gt;.amazonaws.com/workspaces/&lt;workspace-id&gt;/api/v1/labels&quot;
+</code></pre>
+</li>
+</ol>
+<hr>
+<h3>Common Issues</h3>
+<p><strong>Issue: Token file not found</strong></p>
+<ul>
+<li><strong>Error</strong>: <code>open /var/run/secrets/azure/tokens/azure-identity-token: no such file or directory</code></li>
+<li><strong>Solution</strong>: Ensure the service account has the <code>azure.workload.identity/use: &quot;true&quot;</code> label and the pod is using the correct service account</li>
+</ul>
+<p><strong>Issue: Permission denied from AWS</strong></p>
+<ul>
+<li><strong>Error</strong>: <code>403 Forbidden</code> or <code>Access Denied</code> when writing to AMP</li>
+<li><strong>Solutions</strong>:<ul>
+<li>Verify the IAM role has the correct <code>aps:RemoteWrite</code> permission</li>
+<li>Check the trust policy condition matches your service account exactly</li>
+<li>Ensure the workspace ID in the policy matches your AMP workspace</li>
+</ul>
+</li>
+</ul>
+<p><strong>Issue: Webhook not injecting environment variables</strong></p>
+<ul>
+<li><strong>Symptoms</strong>: Missing <code>AZURE_CLIENT_ID</code>, <code>AZURE_TENANT_ID</code>, or token file</li>
+<li><strong>Solutions</strong>:<ul>
+<li>Verify workload identity webhook pods are running: <code>kubectl get pods -n kube-system | grep azure-wi-webhook</code></li>
+<li>Check service account has correct annotation and label</li>
+<li>Restart the pod to trigger webhook injection</li>
+</ul>
+</li>
+</ul>
+<p><strong>Issue: OIDC provider thumbprint mismatch</strong></p>
+<ul>
+<li><strong>Error</strong>: <code>Invalid identity token</code></li>
+<li><strong>Solution</strong>: Update the OIDC provider thumbprint using the manual method above</li>
+</ul>
+<p><strong>Issue: Federated credential subject mismatch</strong></p>
+<ul>
+<li><strong>Error</strong>: <code>AADSTS70021: No matching federated identity record found</code></li>
+<li><strong>Solution</strong>: Ensure the subject in <code>credential.json</code> exactly matches: <code>system:serviceaccount:&lt;namespace&gt;:&lt;service-account-name&gt;</code></li>
+</ul>
+<p><strong>Issue: Prometheus can&#39;t assume AWS role</strong></p>
+<ul>
+<li><strong>Error</strong>: <code>An error occurred (InvalidIdentityToken) when calling the AssumeRoleWithWebIdentity operation</code></li>
+<li><strong>Solutions</strong>:<ul>
+<li>Verify the Azure identity token file exists and is readable</li>
+<li>Check the AWS role ARN is correct in Prometheus configuration</li>
+<li>Ensure the role&#39;s trust policy allows your specific service account</li>
+</ul>
+</li>
+</ul>
+
+</body>
+</html>
