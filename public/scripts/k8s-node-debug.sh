@@ -14,6 +14,11 @@ NAMESPACE="kube-system"
 NODE_NAME=""
 INTERACTIVE_MODE=false
 
+# Internals for cleanup (compatible with macOS bash 3.2)
+__NODE_DEBUGGER_PODS_BEFORE=""
+__PODS_BASELINE_READY=false
+__CLEANUP_DONE=false
+
 usage() {
   cat << EOF
 Launches a debug pod on a Kubernetes node for troubleshooting.
@@ -266,24 +271,57 @@ if ! validate_node_exists "${NODE_NAME}"; then
 fi
 
 cleanup() {
-  local exit_code=$?
-  if [[ ${exit_code} -ne 0 ]]; then
-    log_warn "Script failed with exit code: ${exit_code}"
-    log_info "Checking for leftover debug pods..."
-    
-    local debug_pods
-    debug_pods=$(kubectl get pods -n "${NAMESPACE}" --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | grep -E "node-debugger|debug" || true)
-    
-    if [[ -n "${debug_pods}" ]]; then
-      log_warn "Found debug pods that may need cleanup:"
-      echo "${debug_pods}" | sed 's/^/  - /'
-      log_info "Clean up: kubectl delete pod <pod-name> -n ${NAMESPACE}"
-    fi
+  # Guard against double execution
+  if [[ "${__CLEANUP_DONE}" == "true" ]]; then
+    return 0
   fi
+  __CLEANUP_DONE=true
+
+  # Helper to list node-debugger pods on the selected node
+  list_node_debugger_pods() {
+    kubectl get pods -n "${NAMESPACE}" \
+      --field-selector "spec.nodeName=${NODE_NAME}" \
+      --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | \
+      grep -E '^node-debugger' || true
+  }
+
+  # If we never captured a baseline, avoid destructive guesses
+  if [[ "${__PODS_BASELINE_READY}" != "true" ]]; then
+    # Best-effort notice without deleting potentially unrelated pods
+    local possible
+    possible=$(list_node_debugger_pods)
+    if [[ -n "${possible}" ]]; then
+      log_warn "Debug session ended without baseline; possible leftover pods:"
+      echo "${possible}" | sed 's/^/  - /'
+      log_info "Manually clean with: kubectl delete pod <pod> -n ${NAMESPACE}"
+    fi
+    return 0
+  fi
+
+  # Compute pods created during this session: AFTER minus BEFORE
+  local after before created
+  after=$(list_node_debugger_pods | sort -u || true)
+  before=$(printf "%s\n" "${__NODE_DEBUGGER_PODS_BEFORE}" | sort -u || true)
+  # Use comm to find lines present in AFTER but not in BEFORE
+  created=$(comm -13 <(printf "%s\n" "${before}") <(printf "%s\n" "${after}") || true)
+
+  if [[ -z "${created}" ]]; then
+    # Nothing to delete
+    return 0
+  fi
+
+  log_info "Cleaning up debug pod(s):"
+  local pod
+  while IFS= read -r pod; do
+    [[ -z "${pod}" ]] && continue
+    echo "  - ${pod}"
+    # Best-effort delete; don't fail script on errors
+    kubectl delete pod "${pod}" -n "${NAMESPACE}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done <<< "${created}"
 }
 
-# Set cleanup trap
-trap cleanup EXIT
+# Set cleanup traps (EXIT covers normal exit; INT/TERM cover Ctrl-C/kill)
+trap cleanup EXIT INT TERM
 
 # Start debug session
 log_info "Starting debug session:"
@@ -296,6 +334,12 @@ log_info "  chroot /host                    # Access host filesystem"
 log_info "  nsenter -t 1 -p -n ps aux      # View host processes"
 log_info "  chroot /host systemctl status kubelet"
 echo
+
+# Capture baseline of node-debugger pods on this node before starting session
+__NODE_DEBUGGER_PODS_BEFORE=$(kubectl get pods -n "${NAMESPACE}" \
+  --field-selector "spec.nodeName=${NODE_NAME}" \
+  --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | grep -E '^node-debugger' | sort -u || true)
+__PODS_BASELINE_READY=true
 
 if ! kubectl debug node/"${NODE_NAME}" \
   -it \

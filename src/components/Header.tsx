@@ -1,17 +1,74 @@
+import { useEffect, useState } from 'react';
+import './Header.css';
+
 const Header = () => {
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <header>
-      <h1>Hi, I'm Abhishek 👋</h1>
-      <p>Software Engineer | Cloud & Kubernetes Enthusiast | Photographer & Poet</p>
-      <p>Welcome to my corner of the internet. I build scalable cloud‑native platforms at Radiology Partners and hack on open‑source in my spare time.</p>
-      
-      <nav>
-        <a href="https://github.com/achandra-rp" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://linkedin.com/in/abhishekchandra" target="_blank" rel="noopener">LinkedIn</a>
-        <a href="https://abhichandra.com" target="_blank" rel="noopener">abhichandra.com</a>
-        <a href="https://poetrybyabhishek.com" target="_blank" rel="noopener">poetrybyabhishek.com</a>
-        <a href="mailto:me@abhichandra.com">Email</a>
-      </nav>
+    <header className={`header ${isScrolled ? 'scrolled' : ''}`}>
+      <div className="header-container">
+        <div className="header-logo">
+          <span className="logo-text">AC</span>
+        </div>
+
+        <nav className="header-nav">
+          <button onClick={() => scrollToSection('about')} className="nav-link">
+            About
+          </button>
+          <button onClick={() => scrollToSection('projects')} className="nav-link">
+            Projects
+          </button>
+          <button onClick={() => scrollToSection('resources')} className="nav-link">
+            Resources
+          </button>
+          <button onClick={() => scrollToSection('contact')} className="nav-link">
+            Contact
+          </button>
+        </nav>
+
+        <div className="header-social">
+          <a
+            href="https://github.com/achandra-rp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="social-link"
+            aria-label="GitHub"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+            </svg>
+          </a>
+          <a
+            href="https://linkedin.com/in/abhishekchandra"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="social-link"
+            aria-label="LinkedIn"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path>
+              <rect x="2" y="9" width="4" height="12"></rect>
+              <circle cx="4" cy="4" r="2"></circle>
+            </svg>
+          </a>
+        </div>
+      </div>
     </header>
   );
 };

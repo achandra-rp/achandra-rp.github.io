@@ -1,4 +1,6 @@
 import Header from './components/Header';
+import HeroSection from './components/HeroSection';
+import ProjectsSection from './components/ProjectsSection';
 import ResourcesSection from './components/ResourcesSection';
 import Footer from './components/Footer';
 import './index.css';
@@ -6,8 +8,10 @@ import './index.css';
 function App() {
   return (
     <>
+      <Header />
       <main>
-        <Header />
+        <HeroSection />
+        <ProjectsSection />
         <ResourcesSection />
       </main>
       <Footer />
