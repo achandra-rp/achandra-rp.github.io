@@ -1,0 +1,188 @@
+import DocPage from '../components/DocPage';
+
+const Ec2PressureCheck = () => {
+  return (
+    <DocPage title="EKS Node Pressure Monitor">
+      <p>Monitor EKS node pressure conditions across your cluster. Shows EC2 instances mapped to Kubernetes nodes with pressure status.</p>
+
+      <h2>Features</h2>
+      <ul>
+        <li>Cluster-wide node overview in table format</li>
+        <li>Maps EC2 instances to Kubernetes nodes</li>
+        <li>Monitors disk, memory, and PID pressure</li>
+        <li>Shows node readiness status</li>
+        <li>Displays instance types and availability zones</li>
+        <li>Configurable AWS profiles</li>
+      </ul>
+
+      <h2>Prerequisites</h2>
+      <ul>
+        <li>kubectl with EKS cluster access</li>
+        <li>AWS CLI with ec2:describe-instances permission</li>
+        <li>Kubernetes node read permissions</li>
+      </ul>
+
+      <h2>Installation</h2>
+      <pre><code>{`curl -O https://raw.githubusercontent.com/achandra-rp/achandra-rp.github.io/main/public/scripts/ec2-pressure-check.sh
+chmod +x ec2-pressure-check.sh`}</code></pre>
+
+      <h2>Usage</h2>
+      <pre><code>{`# Basic usage
+./ec2-pressure-check.sh
+
+# Custom AWS profile
+export AWS_PROFILE=my-profile
+./ec2-pressure-check.sh
+
+# One-time override
+AWS_PROFILE=dev ./ec2-pressure-check.sh`}</code></pre>
+
+      <h2>Output</h2>
+      <p>Table columns:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Name</strong></td>
+            <td>EC2 instance name tag</td>
+          </tr>
+          <tr>
+            <td><strong>Instance-ID</strong></td>
+            <td>AWS EC2 instance identifier</td>
+          </tr>
+          <tr>
+            <td><strong>K8s-Node-Name</strong></td>
+            <td>Kubernetes node name (hostname)</td>
+          </tr>
+          <tr>
+            <td><strong>Type</strong></td>
+            <td>EC2 instance type (e.g., t3.medium)</td>
+          </tr>
+          <tr>
+            <td><strong>AZ</strong></td>
+            <td>Availability zone</td>
+          </tr>
+          <tr>
+            <td><strong>CPU-Pressure</strong></td>
+            <td>PID pressure status</td>
+          </tr>
+          <tr>
+            <td><strong>Mem-Pressure</strong></td>
+            <td>Memory pressure status</td>
+          </tr>
+          <tr>
+            <td><strong>Disk-Pressure</strong></td>
+            <td>Disk pressure status</td>
+          </tr>
+          <tr>
+            <td><strong>Status</strong></td>
+            <td>Kubernetes node readiness</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Status Values</h2>
+
+      <h3>Pressure</h3>
+      <ul>
+        <li><strong>OK</strong>: No pressure (condition False)</li>
+        <li><strong>HIGH</strong>: Pressure active (condition True)</li>
+        <li><strong>HIGH-PID</strong>: PID pressure (too many processes)</li>
+        <li><strong>Unknown</strong>: Can't determine status</li>
+        <li><strong>N/A</strong>: Node not in Kubernetes</li>
+      </ul>
+
+      <h3>Node Status</h3>
+      <ul>
+        <li><strong>Ready</strong>: Accepting pods</li>
+        <li><strong>NotReady</strong>: Has issues</li>
+        <li><strong>Unknown</strong>: Can't determine</li>
+        <li><strong>N/A</strong>: Not in Kubernetes</li>
+      </ul>
+
+      <h2>Sample Output</h2>
+      <pre><code>{`EKS Node Status - Cluster: my-cluster
+
+┌──────────────────────┬─────────────────────┬──────────────────────────────┬──────────────┬─────────────────┬──────────────┬──────────────┬───────────────┬────────────┐
+│ Name                 │ Instance-ID         │ K8s-Node-Name                │ Type         │ AZ              │ CPU-Pressure │ Mem-Pressure │ Disk-Pressure │ Status     │
+├──────────────────────┼─────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼──────────────┼──────────────┼───────────────┼────────────┤
+│ worker-node-1        │ i-0123456789abcdef0 │ ip-10-0-1-100                │ t3.medium    │ us-west-2a      │ OK           │ OK           │ OK            │ Ready      │
+│ worker-node-2        │ i-0987654321fedcba0 │ ip-10-0-2-200                │ t3.medium    │ us-west-2b      │ OK           │ HIGH         │ OK            │ Ready      │
+│ worker-node-3        │ i-0abcdef123456789  │ ip-10-0-3-300                │ t3.large     │ us-west-2c      │ OK           │ OK           │ HIGH          │ NotReady   │
+└──────────────────────┴─────────────────────┴──────────────────────────────┴──────────────┴─────────────────┴──────────────┴──────────────┴───────────────┴────────────┘
+
+Legend:
+  HIGH      - Pressure condition active
+  OK        - No pressure
+  HIGH-PID  - PID pressure (too many processes)
+  N/A       - Not found in Kubernetes`}</code></pre>
+
+      <h2>Configuration</h2>
+      <p>Default AWS profile: <code>&lt;your-aws-profile&gt;</code></p>
+      <pre><code>{`# Override profile
+export AWS_PROFILE=my-profile
+AWS_PROFILE=my-profile ./ec2-pressure-check.sh`}</code></pre>
+
+      <p>Cluster detected from kubectl context:</p>
+      <pre><code>kubectl config current-context</code></pre>
+
+      <h2>Troubleshooting</h2>
+      <p><strong>No cluster context</strong></p>
+      <pre><code>{`aws eks update-kubeconfig --region us-west-2 --name my-cluster
+kubectl config current-context`}</code></pre>
+
+      <p><strong>AWS permissions error</strong><br/>
+      Need <code>ec2:DescribeInstances</code> permission.</p>
+
+      <p><strong>Node not in Kubernetes</strong><br/>
+      EC2 instances tagged for cluster but not registered as nodes:</p>
+      <ul>
+        <li>Instance still starting up</li>
+        <li>Kubelet config issues</li>
+        <li>Network problems</li>
+        <li>IAM role issues</li>
+      </ul>
+
+      <h3>Debugging Pressure</h3>
+      <p><strong>Memory Pressure</strong></p>
+      <pre><code>{`kubectl top nodes
+./k8s-node-debug.sh -n <node>
+# Then: chroot /host free -h`}</code></pre>
+
+      <p><strong>Disk Pressure</strong></p>
+      <pre><code>{`./k8s-node-debug.sh -n <node>
+# Then: chroot /host df -h`}</code></pre>
+
+      <p><strong>PID Pressure</strong></p>
+      <pre><code>{`./k8s-node-debug.sh -n <node>
+# Then: nsenter -t 1 -p -n ps aux | wc -l`}</code></pre>
+
+      <h2>Integration</h2>
+      <p>Pairs well with:</p>
+      <ul>
+        <li>k8s-node-debug.sh for detailed node debugging</li>
+        <li>Prometheus/Grafana for historical trends</li>
+        <li>CloudWatch for AWS metrics</li>
+        <li>CI/CD for automated health checks</li>
+      </ul>
+
+      <h2>Use Cases</h2>
+      <ul>
+        <li>Pre-deployment capacity checks</li>
+        <li>Incident response for node issues</li>
+        <li>Capacity planning and scaling</li>
+        <li>Cost optimization</li>
+      </ul>
+
+      <h2>Contributing</h2>
+      <p>Pull requests welcome. Maintain backward compatibility and include error handling.</p>
+    </DocPage>
+  );
+};
+
+export default Ec2PressureCheck;

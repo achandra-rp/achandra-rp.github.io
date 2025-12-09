@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './Header.css';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -14,16 +17,30 @@ const Header = () => {
   }, []);
 
   const scrollToSection = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+    if (location.pathname !== '/') {
+      navigate('/');
+      setTimeout(() => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    } else {
+      const element = document.getElementById(id);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
     }
+  };
+
+  const handleLogoClick = () => {
+    navigate('/');
   };
 
   return (
     <header className={`header ${isScrolled ? 'scrolled' : ''}`}>
       <div className="header-container">
-        <div className="header-logo">
+        <div className="header-logo" onClick={handleLogoClick} style={{ cursor: 'pointer' }}>
           <span className="logo-text">AC</span>
         </div>
 

@@ -15,17 +15,17 @@ export const resourceCategories: ResourceCategory[] = [
     resources: [
       {
         title: "KEDA-Driven Autoscaling Guide",
-        url: "/KEDA-Driven-Autoscaling.html",
+        url: "#/docs/keda-driven-autoscaling",
         description: "Comprehensive guide for Knative Kafka broker autoscaling"
       },
       {
         title: "KEDA Scaling Test Guide",
-        url: "/KEDA-Knative-Kafka-Scaling-Guide.html",
+        url: "#/docs/keda-knative-kafka-scaling",
         description: "Testing and validation procedures for KEDA scaling"
       },
       {
         title: "KEDA Installation Guide",
-        url: "/keda-install.html",
+        url: "#/docs/keda-install",
         description: "Complete setup for EKS with Kafka broker and MSK"
       }
     ]
@@ -35,12 +35,12 @@ export const resourceCategories: ResourceCategory[] = [
     resources: [
       {
         title: "AKS-AMP OIDC Setup",
-        url: "/AKS-AMP-OIDC-Config.html",
+        url: "#/docs/aks-amp-oidc-config",
         description: "Authenticating AKS with AWS Managed Prometheus"
       },
       {
         title: "Troubleshooting Grafana",
-        url: "/troubleshooting-grafana.html",
+        url: "#/docs/troubleshooting-grafana",
         description: "Common issues and solutions for Grafana"
       }
     ]
@@ -50,12 +50,12 @@ export const resourceCategories: ResourceCategory[] = [
     resources: [
       {
         title: "Vector Deployment Guide",
-        url: "/vector-install.html",
+        url: "#/docs/vector-install",
         description: "Troubleshooting and deployment for Vector logging"
       },
       {
         title: "Blackbox Exporter Setup",
-        url: "/blackbox-exporter-setup.html",
+        url: "#/docs/blackbox-exporter-setup",
         description: "HTTP service monitoring with Prometheus"
       }
     ]
@@ -65,7 +65,7 @@ export const resourceCategories: ResourceCategory[] = [
     resources: [
       {
         title: "Kafka-Knative-AMP Setup",
-        url: "/kafka-knative-amp-setup.html",
+        url: "#/docs/kafka-knative-amp-setup",
         description: "End-to-end installation and validation guide"
       }
     ]
@@ -75,22 +75,22 @@ export const resourceCategories: ResourceCategory[] = [
     resources: [
       {
         title: "K8s Node Debug Script",
-        url: "/k8s-node-debug.html",
+        url: "#/docs/k8s-node-debug",
         description: "Interactive node debugging tool with fzf integration"
       },
       {
         title: "EC2 Pressure Check Script",
-        url: "/ec2-pressure-check.html",
+        url: "#/docs/ec2-pressure-check",
         description: "EKS node pressure monitoring automation"
       },
       {
         title: "Kafka CLI Pod",
-        url: "/kafka-cli.html",
+        url: "#/docs/kafka-cli",
         description: "Kubernetes pod configuration for Kafka operations"
       },
       {
         title: "Network Tools Pod",
-        url: "/net-tools-pod.html",
+        url: "#/docs/net-tools-pod",
         description: "Comprehensive Kubernetes debugging pod with network analysis tools"
       }
     ]
