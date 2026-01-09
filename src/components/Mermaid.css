@@ -1,0 +1,164 @@
+/* Mermaid Diagram Styles */
+.mermaid-container {
+  position: relative;
+  margin: 1.5rem 0;
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mermaid-controls {
+  padding: 12px 20px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--accent-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mermaid-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.mermaid-hint svg {
+  color: var(--accent-medium);
+}
+
+.mermaid-zoom-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.mermaid-zoom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mermaid-zoom-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-medium);
+}
+
+.mermaid-zoom-btn:active {
+  transform: scale(0.95);
+}
+
+.mermaid-container .mermaid {
+  display: flex;
+  justify-content: center;
+  min-height: 200px;
+}
+
+/* Override mermaid's default styles to match our theme */
+.mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-container .node rect,
+.mermaid-container .node circle,
+.mermaid-container .node ellipse,
+.mermaid-container .node polygon {
+  fill: var(--bg-secondary);
+  stroke: var(--accent-border);
+  stroke-width: 2px;
+}
+
+.mermaid-container .node .label {
+  color: var(--text-heading);
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+.mermaid-container .edgePath .path {
+  stroke: var(--accent-medium);
+  stroke-width: 2px;
+}
+
+.mermaid-container .edgeLabel {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+}
+
+.mermaid-container .cluster rect {
+  fill: var(--bg-tertiary);
+  stroke: var(--accent-border);
+  stroke-width: 1px;
+  rx: 4px;
+}
+
+.mermaid-container .cluster text {
+  fill: var(--text-heading);
+  font-weight: 600;
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+.mermaid-container .actor {
+  fill: var(--bg-secondary);
+  stroke: var(--accent-border);
+}
+
+.mermaid-container .noteText {
+  fill: var(--text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .mermaid-controls {
+    padding: 10px 14px;
+  }
+
+  .mermaid-hint {
+    font-size: 11px;
+  }
+
+  .mermaid-zoom-controls {
+    bottom: 12px;
+    right: 12px;
+  }
+
+  .mermaid-zoom-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .mermaid-container svg {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mermaid-hint span {
+    display: none;
+  }
+
+  .mermaid-hint::after {
+    content: 'Pinch to zoom';
+  }
+}

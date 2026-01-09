@@ -173,30 +173,9 @@
   font-family: 'IBM Plex Mono', monospace;
 }
 
-/* Architecture Diagram */
+/* Architecture Diagram - using Mermaid component */
 .iamra-diagram {
   margin: 1.5rem 0;
-  overflow-x: auto;
-}
-
-.iamra-diagram pre {
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-  border: 1px solid var(--accent-border);
-  border-radius: 8px;
-  padding: 24px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-primary);
-  white-space: pre;
-  margin: 0;
-}
-
-@media (max-width: 768px) {
-  .iamra-diagram pre {
-    font-size: 9px;
-    padding: 16px;
-  }
 }
 
 /* Flow List */

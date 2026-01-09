@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import DocPage from '../components/DocPage';
+import Mermaid from '../components/Mermaid';
 import './IamRolesAnywhereSetup.css';
+import '../components/Mermaid.css';
 
 interface Section {
   id: string;
@@ -99,47 +101,137 @@ const IamRolesAnywhereSetup = () => {
           <h2>Architecture Overview</h2>
         </header>
 
-        <div className="iamra-diagram">
-          <pre>{`+-----------------------------------------------------------------------------+
-|                         ON-PREMISES RKE2 CLUSTER                            |
-|                                                                             |
-|  +-----------+    +-------------+    +---------------------------------+    |
-|  |cert-manager|-->| Certificate |-->| Pod with AWS Signing Helper     |    |
-|  |           |    | (X.509)     |    | Sidecar                         |    |
-|  +-----------+    +-------------+    |  +---------+  +--------------+  |    |
-|         |                            |  | App     |  | Signing      |  |    |
-|         |                            |  |Container|<-| Helper       |  |    |
-|         v                            |  +---------+  +------+-------+  |    |
-|  +-----------+                       +----------------------|----------+    |
-|  | Cluster CA|                                              |               |
-|  +-----------+                                              |               |
-+-------------------------------------------------------------|---------------+
-                                                              |
-                                                              v
-+-----------------------------------------------------------------------------+
-|                              AWS                                             |
-|                                                                             |
-|  +-----------------+    +-----------------+    +-----------------+          |
-|  | IAM Roles       |--->| Trust Anchor    |--->| Profile         |          |
-|  | Anywhere        |    | (CA Cert)       |    | (Role Mapping)  |          |
-|  +-----------------+    +-----------------+    +--------+--------+          |
-|                                                         |                   |
-|                                                         v                   |
-|  +-----------------+    +-----------------+    +-----------------+          |
-|  | IAM Role        |<---| STS Temporary   |<---| Credential      |          |
-|  | (Permissions)   |    | Credentials     |    | Exchange        |          |
-|  +-----------------+    +-----------------+    +-----------------+          |
-+-----------------------------------------------------------------------------+`}</pre>
-        </div>
+        <Mermaid chart={`
+graph TB
+    subgraph RKE2["ON-PREMISES RKE2 CLUSTER"]
+        CM[cert-manager] -->|issues| CERT[X.509 Certificate]
+        CM -->|uses| CA[Cluster CA]
+        CERT -->|mounts to| POD[Pod with Signing Helper]
+
+        subgraph POD_INTERNAL["Pod Components"]
+            APP[App Container]
+            HELPER[AWS Signing Helper Sidecar]
+        end
+
+        POD --> POD_INTERNAL
+        HELPER -->|serves credentials| APP
+    end
+
+    subgraph AWS["AWS"]
+        IAMRA[IAM Roles Anywhere]
+        TA[Trust Anchor<br/>CA Certificate]
+        PROFILE[Profile<br/>Role Mapping]
+        STS[STS Temporary<br/>Credentials]
+        ROLE[IAM Role<br/>Permissions]
+
+        IAMRA --> TA
+        TA --> PROFILE
+        PROFILE --> STS
+        STS --> ROLE
+    end
+
+    HELPER -->|authenticates with cert| IAMRA
+
+    style RKE2 fill:#282c34,stroke:#61afef,stroke-width:2px
+    style AWS fill:#282c34,stroke:#e5c07b,stroke-width:2px
+    style POD_INTERNAL fill:#21252b,stroke:#5c6370,stroke-width:1px
+    style CM fill:#61afef,stroke:#61afef,color:#1a1d23
+    style IAMRA fill:#e5c07b,stroke:#e5c07b,color:#1a1d23
+    style HELPER fill:#98c379,stroke:#98c379,color:#1a1d23
+        `} className="iamra-diagram" />
+
 
         <h3>How It Works</h3>
+
+        <h4>The Problem</h4>
+        <p>On-premises Kubernetes clusters can't use IAM roles like EC2 instances do. Traditionally, you'd need to:</p>
+        <ul>
+          <li>Create static IAM access keys</li>
+          <li>Store them as secrets in Kubernetes</li>
+          <li>Rotate them manually (security risk if forgotten)</li>
+          <li>Risk exposure if secrets are compromised</li>
+        </ul>
+
+        <h4>The Solution</h4>
+        <p>IAM Roles Anywhere allows workloads outside AWS to obtain <strong>temporary, auto-rotating credentials</strong> using X.509 certificates instead of static keys. Here's the complete flow:</p>
+
         <ol className="iamra-flow-list">
-          <li><strong>cert-manager</strong> issues X.509 certificates to pods using the cluster CA</li>
-          <li><strong>AWS Signing Helper</strong> sidecar uses the certificate to authenticate with IAM Roles Anywhere</li>
-          <li><strong>IAM Roles Anywhere</strong> validates the certificate against the Trust Anchor (cluster CA)</li>
-          <li><strong>Temporary credentials</strong> are returned and served via a local metadata endpoint</li>
-          <li><strong>Application</strong> uses standard AWS SDK to get credentials from the local endpoint</li>
+          <li>
+            <strong>Certificate Issuance</strong>
+            <p>When a pod starts, cert-manager automatically issues an X.509 certificate signed by your cluster's CA. This certificate uniquely identifies the pod and has a short TTL (e.g., 12 hours).</p>
+          </li>
+          <li>
+            <strong>Certificate Mounting</strong>
+            <p>The certificate and private key are mounted into the pod as a Kubernetes secret. The AWS Signing Helper sidecar container has access to these files.</p>
+          </li>
+          <li>
+            <strong>Authentication Request</strong>
+            <p>When your application needs AWS credentials, it calls the local metadata endpoint (<code>http://127.0.0.1:9911</code>) served by the signing helper sidecar.</p>
+          </li>
+          <li>
+            <strong>Certificate Validation</strong>
+            <p>The signing helper uses the pod's certificate to make a <code>CreateSession</code> API call to IAM Roles Anywhere. AWS validates the certificate against the Trust Anchor (your cluster CA uploaded to AWS).</p>
+          </li>
+          <li>
+            <strong>Trust Verification</strong>
+            <p>IAM Roles Anywhere checks:
+              <ul>
+                <li>Is the certificate signed by a trusted CA (Trust Anchor)?</li>
+                <li>Is the certificate still valid (not expired)?</li>
+                <li>Does the Trust Anchor match a registered Trust Anchor?</li>
+              </ul>
+            </p>
+          </li>
+          <li>
+            <strong>Credential Issuance</strong>
+            <p>If validation passes, AWS STS issues temporary credentials (AccessKeyId, SecretAccessKey, SessionToken) valid for 1 hour (configurable). These are returned to the signing helper.</p>
+          </li>
+          <li>
+            <strong>Credential Serving</strong>
+            <p>The signing helper exposes these credentials via a local HTTP endpoint that mimics the EC2 instance metadata service. Your application uses the standard AWS SDK to fetch credentials from this endpoint.</p>
+          </li>
+          <li>
+            <strong>Automatic Renewal</strong>
+            <p>Before credentials expire, the signing helper automatically requests new ones using the same certificate. When the certificate nears expiration, cert-manager issues a new one. Your application never sees this complexity.</p>
+          </li>
         </ol>
+
+        <h4>Key Benefits</h4>
+        <div className="iamra-steps-overview">
+          <div className="iamra-step-card">
+            <span className="iamra-step-num">🔒</span>
+            <span className="iamra-step-name"><strong>No Static Credentials</strong> - Certificates rotate automatically, reducing breach risk</span>
+          </div>
+          <div className="iamra-step-card">
+            <span className="iamra-step-num">⏱️</span>
+            <span className="iamra-step-name"><strong>Short-Lived Tokens</strong> - Credentials expire in 1 hour, limiting exposure window</span>
+          </div>
+          <div className="iamra-step-card">
+            <span className="iamra-step-num">🔄</span>
+            <span className="iamra-step-name"><strong>Zero Maintenance</strong> - No manual rotation, renewal happens automatically</span>
+          </div>
+          <div className="iamra-step-card">
+            <span className="iamra-step-num">📝</span>
+            <span className="iamra-step-name"><strong>Audit Trail</strong> - All credential requests logged in CloudTrail</span>
+          </div>
+          <div className="iamra-step-card">
+            <span className="iamra-step-num">🎯</span>
+            <span className="iamra-step-name"><strong>Standard AWS SDK</strong> - No code changes, works with existing applications</span>
+          </div>
+        </div>
+
+        <h4>Security Model</h4>
+        <p>The security is based on a chain of trust:</p>
+        <ol>
+          <li><strong>You trust your cluster CA</strong> - Only your cluster can issue certificates signed by this CA</li>
+          <li><strong>AWS trusts your cluster CA</strong> - You upload the CA certificate to AWS as a Trust Anchor</li>
+          <li><strong>Certificates prove identity</strong> - Any certificate signed by your CA is trusted by AWS</li>
+          <li><strong>Fine-grained access</strong> - The IAM role determines what the pod can access in AWS</li>
+        </ol>
+
+        <div className="iamra-callout info">
+          <strong>Think of it like this:</strong> Your cluster CA is like a passport authority. AWS trusts passports (certificates) issued by this authority. Each pod gets a passport that proves it's from your trusted cluster. AWS checks the passport and issues temporary visitor credentials based on the role you've assigned.
+        </div>
 
         <h3>Steps Summary</h3>
         <div className="iamra-steps-overview">
