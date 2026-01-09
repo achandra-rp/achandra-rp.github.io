@@ -1,222 +1,514 @@
-/* Tab styles */
-.iamra-tab-container {
-  background: var(--card-bg);
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  margin-top: 2rem;
-}
+/* IAM Roles Anywhere Setup - Technical Documentation Aesthetic */
 
-.iamra-tab-nav {
-  display: flex;
-  flex-wrap: wrap;
-  background: var(--bg-secondary);
-  border-radius: 8px 8px 0 0;
-  border-bottom: 2px solid var(--accent-primary);
-  gap: 2px;
-}
-
-.iamra-tab-btn {
-  padding: 12px 16px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-}
-
-.iamra-tab-btn:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.iamra-tab-btn.active {
-  background: var(--card-bg);
-  color: var(--accent-primary);
-  border-bottom-color: var(--accent-primary);
-}
-
-.iamra-tab-content {
+/* Floating Navigation */
+.iamra-nav {
+  position: fixed;
+  left: 2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
   display: none;
-  padding: 25px;
 }
 
-.iamra-tab-content.active {
-  display: block;
+@media (min-width: 1400px) {
+  .iamra-nav {
+    display: block;
+  }
 }
 
-/* Info boxes */
-.iamra-info-box {
-  padding: 15px;
+.iamra-nav-track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.iamra-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
   border-radius: 6px;
-  margin: 15px 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
 }
 
-.iamra-info-box.warning {
-  background: rgba(255, 193, 7, 0.15);
-  border-left: 4px solid #ffc107;
+.iamra-nav-item:hover {
+  background: var(--bg-tertiary);
 }
 
-.iamra-info-box.critical {
-  background: rgba(220, 53, 69, 0.15);
-  border-left: 4px solid #dc3545;
+.iamra-nav-item.active {
+  background: var(--bg-tertiary);
 }
 
-.iamra-info-box.success {
-  background: rgba(40, 167, 69, 0.15);
-  border-left: 4px solid #28a745;
+.iamra-nav-item.active .iamra-nav-marker {
+  background: var(--accent-medium);
+  color: var(--bg-primary);
+  border-color: var(--accent-medium);
 }
 
-.iamra-info-box.info {
-  background: rgba(23, 162, 184, 0.15);
-  border-left: 4px solid #17a2b8;
-}
-
-.iamra-info-box ul {
-  margin: 10px 0 0 0;
-  padding-left: 20px;
-}
-
-/* Step indicator */
-.iamra-step-badge {
-  display: inline-block;
-  background: var(--accent-primary);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  margin-right: 10px;
-}
-
-.iamra-step-badge.manual {
-  background: #dc3545;
-}
-
-.iamra-step-badge.checkpoint {
-  background: #28a745;
-}
-
-/* Header info */
-.iamra-header-info {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 15px;
-  margin: 20px 0;
-}
-
-.iamra-header-card {
-  background: var(--card-bg);
-  padding: 15px;
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--border-color);
-}
-
-.iamra-header-card h4 {
-  margin: 0 0 10px 0;
+.iamra-nav-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
   color: var(--text-secondary);
-  font-size: 12px;
-  text-transform: uppercase;
+  border: 2px solid var(--accent-subtle);
+  border-radius: 4px;
+  transition: all 0.2s ease;
 }
 
-.iamra-header-card p {
-  margin: 0;
-  font-size: 14px;
+.iamra-nav-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.iamra-nav-item:hover .iamra-nav-label,
+.iamra-nav-item.active .iamra-nav-label {
   color: var(--text-primary);
 }
 
-/* Checklist */
-.iamra-checklist {
-  list-style: none;
-  padding: 0;
+/* Introduction */
+.iamra-intro {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--accent-border);
 }
 
-.iamra-checklist li {
-  padding: 8px 0;
-  padding-left: 30px;
-  position: relative;
+.iamra-intro > p {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  max-width: 720px;
 }
 
-.iamra-checklist li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10px;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--accent-primary);
-  border-radius: 3px;
-}
-
-/* Architecture diagram */
-.iamra-architecture {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+/* Meta Grid */
+.iamra-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin-top: 1.5rem;
+  background: var(--accent-border);
+  border: 1px solid var(--accent-border);
   border-radius: 6px;
-  padding: 20px;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  overflow-x: auto;
-  white-space: pre;
-  line-height: 1.3;
+  overflow: hidden;
 }
 
-/* Table improvements */
-.iamra-tab-content table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 15px 0;
-  font-size: 14px;
-}
-
-.iamra-tab-content th,
-.iamra-tab-content td {
-  padding: 10px 12px;
-  text-align: left;
-  border: 1px solid var(--border-color);
-}
-
-.iamra-tab-content th {
-  background: var(--bg-secondary);
-  font-weight: 600;
-}
-
-.iamra-tab-content tr:nth-child(even) {
-  background: var(--bg-secondary);
-}
-
-/* Responsive adjustments */
 @media (max-width: 768px) {
-  .iamra-tab-nav {
-    flex-direction: column;
-  }
-
-  .iamra-tab-btn {
-    width: 100%;
-    text-align: left;
-    border-bottom: none;
-    border-left: 3px solid transparent;
-  }
-
-  .iamra-tab-btn.active {
-    border-bottom: none;
-    border-left-color: var(--accent-primary);
-  }
-
-  .iamra-header-info {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .iamra-architecture {
-    font-size: 9px;
+  .iamra-meta-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 480px) {
-  .iamra-header-info {
+  .iamra-meta-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.iamra-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+}
+
+.iamra-meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.iamra-meta-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-heading);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Sections */
+.iamra-section {
+  margin-bottom: 4rem;
+  padding-top: 1rem;
+  scroll-margin-top: 100px;
+}
+
+.iamra-section-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--accent-border);
+}
+
+.iamra-section-header h2 {
+  margin: 0;
+  padding: 0;
+  border: none;
+  flex: 1;
+  min-width: 200px;
+}
+
+.iamra-section-time {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Architecture Diagram */
+.iamra-diagram {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+
+.iamra-diagram pre {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  padding: 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  white-space: pre;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .iamra-diagram pre {
+    font-size: 9px;
+    padding: 16px;
+  }
+}
+
+/* Flow List */
+.iamra-flow-list {
+  counter-reset: flow-counter;
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0;
+}
+
+.iamra-flow-list li {
+  position: relative;
+  padding: 12px 16px 12px 48px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  counter-increment: flow-counter;
+}
+
+.iamra-flow-list li::before {
+  content: counter(flow-counter);
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--accent-medium);
+  color: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  border-radius: 4px;
+}
+
+/* Steps Overview */
+.iamra-steps-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 1.5rem 0;
+}
+
+.iamra-step-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  transition: border-color 0.2s ease;
+}
+
+.iamra-step-card:hover {
+  border-color: var(--accent-subtle);
+}
+
+.iamra-step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.iamra-step-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-heading);
+}
+
+/* Prerequisites List */
+.iamra-prereq-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: grid;
+  gap: 6px;
+}
+
+.iamra-prereq-list li {
+  position: relative;
+  padding: 10px 16px 10px 36px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.iamra-prereq-list li::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: var(--accent-medium);
+  border-radius: 2px;
+}
+
+/* Callout Boxes */
+.iamra-callout {
+  position: relative;
+  padding: 16px 20px;
+  margin: 1.5rem 0;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.iamra-callout::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 6px 0 0 6px;
+}
+
+.iamra-callout.info {
+  background: rgba(97, 175, 239, 0.08);
+  border: 1px solid rgba(97, 175, 239, 0.2);
+}
+
+.iamra-callout.info::before {
+  background: #61afef;
+}
+
+.iamra-callout.warning {
+  background: rgba(229, 192, 123, 0.08);
+  border: 1px solid rgba(229, 192, 123, 0.2);
+}
+
+.iamra-callout.warning::before {
+  background: #e5c07b;
+}
+
+.iamra-callout.critical {
+  background: rgba(224, 108, 117, 0.08);
+  border: 1px solid rgba(224, 108, 117, 0.2);
+}
+
+.iamra-callout.critical::before {
+  background: #e06c75;
+}
+
+.iamra-callout.success {
+  background: rgba(152, 195, 121, 0.08);
+  border: 1px solid rgba(152, 195, 121, 0.2);
+}
+
+.iamra-callout.success::before {
+  background: #98c379;
+}
+
+.iamra-callout strong {
+  color: var(--text-heading);
+}
+
+.iamra-callout ul {
+  margin: 10px 0 0 0;
+  padding-left: 20px;
+}
+
+.iamra-callout li {
+  margin-bottom: 4px;
+}
+
+/* Details/Summary (Collapsible Sections) */
+.iamra-details {
+  margin: 1.5rem 0;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.iamra-details summary {
+  padding: 14px 18px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-heading);
+  transition: background 0.2s ease;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.iamra-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.iamra-details summary::before {
+  content: '+';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.iamra-details[open] summary::before {
+  content: '-';
+  background: var(--accent-medium);
+  color: var(--bg-primary);
+}
+
+.iamra-details summary:hover {
+  background: var(--bg-tertiary);
+}
+
+.iamra-details > *:not(summary) {
+  padding: 0 18px 18px 18px;
+}
+
+.iamra-details pre {
+  margin-top: 0;
+}
+
+/* Table Improvements */
+.iamra-section table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.iamra-section th {
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--text-heading);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--accent-border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.iamra-section td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--accent-border);
+  vertical-align: top;
+}
+
+.iamra-section tr:last-child td {
+  border-bottom: none;
+}
+
+.iamra-section tbody tr:hover {
+  background: var(--bg-secondary);
+}
+
+/* Code Block Enhancements within sections */
+.iamra-section pre {
+  position: relative;
+  margin: 1rem 0;
+}
+
+.iamra-section pre code {
+  display: block;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .iamra-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .iamra-section-header h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .iamra-section {
+    margin-bottom: 3rem;
+  }
+
+  .iamra-callout {
+    padding: 12px 14px;
+  }
+
+  .iamra-details summary {
+    padding: 12px 14px;
   }
 }
