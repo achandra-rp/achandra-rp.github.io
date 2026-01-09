@@ -34,6 +34,11 @@ export const resourceCategories: ResourceCategory[] = [
     title: "Kubernetes Operations",
     resources: [
       {
+        title: "IAM Roles Anywhere Setup",
+        url: "#/docs/iam-roles-anywhere-setup",
+        description: "Configure AWS IAM Roles Anywhere for RKE2 clusters"
+      },
+      {
         title: "AKS-AMP OIDC Setup",
         url: "#/docs/aks-amp-oidc-config",
         description: "Authenticating AKS with AWS Managed Prometheus"

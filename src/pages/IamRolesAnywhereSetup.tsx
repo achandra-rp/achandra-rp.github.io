@@ -1,0 +1,1084 @@
+import { useState } from 'react';
+import DocPage from '../components/DocPage';
+import './IamRolesAnywhereSetup.css';
+
+type TabName = 'overview' | 'step1' | 'step2' | 'step3' | 'step4' | 'step5' | 'step6' | 'troubleshooting';
+
+const IamRolesAnywhereSetup = () => {
+  const [activeTab, setActiveTab] = useState<TabName>('overview');
+
+  const tabs: { id: TabName; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'step1', label: '1. cert-manager' },
+    { id: 'step2', label: '2. Extract CA' },
+    { id: 'step3', label: '3. AWS Resources' },
+    { id: 'step4', label: '4. IAM Roles' },
+    { id: 'step5', label: '5. Cert Issuer' },
+    { id: 'step6', label: '6. Test Setup' },
+    { id: 'troubleshooting', label: 'Troubleshooting' },
+  ];
+
+  return (
+    <DocPage title="IAM Roles Anywhere Setup for RKE2 Clusters">
+      <p>This guide provides step-by-step instructions for configuring AWS IAM Roles Anywhere on an on-premises RKE2 Kubernetes cluster. It enables workloads to obtain temporary AWS credentials using X.509 certificates instead of static access keys.</p>
+
+      <div className="iamra-header-info">
+        <div className="iamra-header-card">
+          <h4>Total Time</h4>
+          <p>~45 minutes</p>
+        </div>
+        <div className="iamra-header-card">
+          <h4>Prerequisites</h4>
+          <p>kubectl, AWS CLI, Helm</p>
+        </div>
+        <div className="iamra-header-card">
+          <h4>Cluster Type</h4>
+          <p>RKE2 (Rancher Kubernetes)</p>
+        </div>
+        <div className="iamra-header-card">
+          <h4>AWS Region</h4>
+          <p>us-east-1</p>
+        </div>
+      </div>
+
+      <div className="iamra-tab-container">
+        <div className="iamra-tab-nav">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`iamra-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Overview Tab */}
+        <div className={`iamra-tab-content ${activeTab === 'overview' ? 'active' : ''}`}>
+          <h2>Architecture Overview</h2>
+
+          <pre className="iamra-architecture">{`+-----------------------------------------------------------------------------+
+|                         ON-PREMISES RKE2 CLUSTER                            |
+|                                                                             |
+|  +-----------+    +-------------+    +---------------------------------+    |
+|  |cert-manager|-->| Certificate |-->| Pod with AWS Signing Helper     |    |
+|  |           |    | (X.509)     |    | Sidecar                         |    |
+|  +-----------+    +-------------+    |  +---------+  +--------------+  |    |
+|         |                            |  | App     |  | Signing      |  |    |
+|         |                            |  |Container|<-| Helper       |  |    |
+|         v                            |  +---------+  +------+-------+  |    |
+|  +-----------+                       +----------------------|----------+    |
+|  | Cluster CA|                                              |               |
+|  +-----------+                                              |               |
++-------------------------------------------------------------|---------------+
+                                                              |
+                                                              v
++-----------------------------------------------------------------------------+
+|                              AWS                                             |
+|                                                                             |
+|  +-----------------+    +-----------------+    +-----------------+          |
+|  | IAM Roles       |--->| Trust Anchor    |--->| Profile         |          |
+|  | Anywhere        |    | (CA Cert)       |    | (Role Mapping)  |          |
+|  +-----------------+    +-----------------+    +--------+--------+          |
+|                                                         |                   |
+|                                                         v                   |
+|  +-----------------+    +-----------------+    +-----------------+          |
+|  | IAM Role        |<---| STS Temporary   |<---| Credential      |          |
+|  | (Permissions)   |    | Credentials     |    | Exchange        |          |
+|  +-----------------+    +-----------------+    +-----------------+          |
++-----------------------------------------------------------------------------+`}</pre>
+
+          <h3>How It Works</h3>
+          <ol>
+            <li><strong>cert-manager</strong> issues X.509 certificates to pods using the cluster CA</li>
+            <li><strong>AWS Signing Helper</strong> sidecar uses the certificate to authenticate with IAM Roles Anywhere</li>
+            <li><strong>IAM Roles Anywhere</strong> validates the certificate against the Trust Anchor (cluster CA)</li>
+            <li><strong>Temporary credentials</strong> are returned and served via a local metadata endpoint</li>
+            <li><strong>Application</strong> uses standard AWS SDK to get credentials from the local endpoint</li>
+          </ol>
+
+          <h3>Steps Summary</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>Install cert-manager</td>
+                <td><span className="iamra-step-badge">Automated</span></td>
+                <td>5 min</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>Extract Cluster CA Certificate</td>
+                <td><span className="iamra-step-badge">Automated</span></td>
+                <td>2 min</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Create AWS IAM Roles Anywhere Resources</td>
+                <td><span className="iamra-step-badge manual">Manual</span></td>
+                <td>15 min</td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>Create IAM Roles with Trust Policies</td>
+                <td><span className="iamra-step-badge manual">Manual</span></td>
+                <td>10 min</td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td>Configure Certificate Issuer</td>
+                <td><span className="iamra-step-badge">Automated</span></td>
+                <td>5 min</td>
+              </tr>
+              <tr>
+                <td>6</td>
+                <td>Test Setup</td>
+                <td><span className="iamra-step-badge checkpoint">Checkpoint</span></td>
+                <td>10 min</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Prerequisites</h3>
+          <ul className="iamra-checklist">
+            <li>SSH access to RKE2 cluster nodes</li>
+            <li><code>kubectl</code> access to the cluster</li>
+            <li>AWS Console access with IAM administrative permissions</li>
+            <li>AWS CLI configured with appropriate credentials</li>
+            <li>Helm installed</li>
+          </ul>
+
+          <h3>Required Information</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Description</th>
+                <th>Example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>CLUSTER_NAME</code></td>
+                <td>Kubernetes cluster identifier</td>
+                <td>greensboro-edge</td>
+              </tr>
+              <tr>
+                <td><code>AWS_ACCOUNT_ID</code></td>
+                <td>12-digit AWS account number</td>
+                <td>471112935967</td>
+              </tr>
+              <tr>
+                <td><code>AWS_REGION</code></td>
+                <td>Target AWS region</td>
+                <td>us-east-1</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="iamra-info-box critical">
+            <strong>Critical:</strong> The CA certificate used for the Trust Anchor <strong>MUST</strong> have <code>CA:TRUE</code> in Basic Constraints. Extracting from the wrong source will cause IAMRA authentication to fail.
+          </div>
+        </div>
+
+        {/* Step 1: cert-manager */}
+        <div className={`iamra-tab-content ${activeTab === 'step1' ? 'active' : ''}`}>
+          <h2><span className="iamra-step-badge">Automated</span> Step 1: Install cert-manager</h2>
+          <p><strong>Duration:</strong> 5 minutes</p>
+
+          <h3>1.1 Add Helm Repository</h3>
+          <pre><code>{`# Add the Jetstack Helm repository
+helm repo add jetstack https://charts.jetstack.io
+
+# Update Helm repositories
+helm repo update
+
+# Verify
+helm search repo jetstack/cert-manager`}</code></pre>
+
+          <h3>1.2 Check for Existing Installation</h3>
+          <pre><code>{`# Check if cert-manager is already installed
+kubectl get namespace cert-manager 2>/dev/null && \\
+  echo "cert-manager namespace exists" || \\
+  echo "cert-manager not installed"
+
+# Check for CRDs
+kubectl get crd certificates.cert-manager.io 2>/dev/null && \\
+  echo "CRDs exist" || \\
+  echo "CRDs not installed"`}</code></pre>
+
+          <div className="iamra-info-box info">
+            If cert-manager is already installed and running, skip to Step 1.4 (Verification).
+          </div>
+
+          <h3>1.3 Install cert-manager</h3>
+          <pre><code>{`# Install cert-manager with CRDs
+helm install cert-manager jetstack/cert-manager \\
+  --namespace cert-manager \\
+  --create-namespace \\
+  --version v1.14.4 \\
+  --set crds.enabled=true \\
+  --set prometheus.enabled=true \\
+  --set webhook.timeoutSeconds=30
+
+# Wait for deployment to complete
+kubectl -n cert-manager rollout status deployment/cert-manager --timeout=120s
+kubectl -n cert-manager rollout status deployment/cert-manager-webhook --timeout=120s
+kubectl -n cert-manager rollout status deployment/cert-manager-cainjector --timeout=120s`}</code></pre>
+
+          <h3>1.4 Verification</h3>
+          <pre><code>{`# Check 1: All pods running
+kubectl get pods -n cert-manager
+# Expected: 3 pods all in Running state with 1/1 ready
+
+# Check 2: CRDs installed
+kubectl get crd | grep cert-manager
+# Expected: certificates.cert-manager.io, clusterissuers.cert-manager.io, etc.
+
+# Check 3: Webhook is responding
+kubectl get apiservices | grep cert-manager
+# Expected: v1.cert-manager.io shows True in AVAILABLE column`}</code></pre>
+
+          <h3>1.5 Test Certificate Creation (Optional)</h3>
+          <pre><code>{`# Create a test certificate
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager-test
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: test-selfsigned
+  namespace: cert-manager-test
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: test-cert
+  namespace: cert-manager-test
+spec:
+  secretName: test-cert-tls
+  duration: 1h
+  renewBefore: 30m
+  commonName: test.example.com
+  issuerRef:
+    name: test-selfsigned
+    kind: Issuer
+EOF
+
+# Wait and check
+sleep 10
+kubectl get certificate -n cert-manager-test test-cert
+# Expected: Ready = True
+
+# Cleanup
+kubectl delete namespace cert-manager-test`}</code></pre>
+
+          <div className="iamra-info-box success">
+            <strong>Checkpoint:</strong> All cert-manager pods running, CRDs installed, webhook available. Proceed to Step 2.
+          </div>
+        </div>
+
+        {/* Step 2: Extract CA */}
+        <div className={`iamra-tab-content ${activeTab === 'step2' ? 'active' : ''}`}>
+          <h2><span className="iamra-step-badge">Automated</span> Step 2: Extract Cluster CA Certificate</h2>
+          <p><strong>Duration:</strong> 2 minutes</p>
+
+          <div className="iamra-info-box critical">
+            <strong>Critical:</strong> The certificate MUST have <code>CA:TRUE</code> in Basic Constraints. The <code>rke2-serving</code> secret contains the API server certificate (CA:FALSE) which will NOT work.
+          </div>
+
+          <h3>2.1 Extract the CA Certificate</h3>
+          <pre><code>{`# Method 1: Extract from kube-root-ca.crt ConfigMap (RECOMMENDED)
+kubectl get configmap kube-root-ca.crt \\
+  -n kube-system \\
+  -o jsonpath='{.data.ca\\.crt}' > cluster-ca.crt
+
+# Method 2: Extract from kubeconfig (alternative)
+kubectl config view --raw \\
+  -o jsonpath='{.clusters[?(@.name=="greensboro-edge")].cluster.certificate-authority-data}' \\
+  | base64 -d > cluster-ca.crt
+
+# Method 3: SSH to node (fallback)
+# ssh user@control-plane-node
+# sudo cat /var/lib/rancher/rke2/server/tls/server-ca.crt`}</code></pre>
+
+          <h3>2.2 Verify the Certificate (CRITICAL)</h3>
+          <pre><code>{`# Check certificate details
+openssl x509 -in cluster-ca.crt -text -noout | head -20
+
+# CRITICAL: Verify it's a CA certificate
+openssl x509 -in cluster-ca.crt -text -noout | grep -A2 "Basic Constraints"
+# MUST show: CA:TRUE
+
+# Check validity
+openssl x509 -in cluster-ca.crt -checkend 0
+# Expected: "Certificate will not expire"`}</code></pre>
+
+          <div className="iamra-info-box warning">
+            <strong>If you see CA:FALSE:</strong> You extracted the wrong certificate. Use the <code>kube-root-ca.crt</code> ConfigMap method.
+          </div>
+
+          <h3>2.3 Save Certificate Information</h3>
+          <pre><code>{`# Get certificate fingerprint (SHA-256)
+openssl x509 -in cluster-ca.crt -fingerprint -sha256 -noout
+
+# Get certificate subject
+openssl x509 -in cluster-ca.crt -subject -noout
+
+# Get certificate validity period
+openssl x509 -in cluster-ca.crt -dates -noout
+
+# Save certificate as base64 (for AWS CLI/Terraform)
+base64 -i cluster-ca.crt > cluster-ca.crt.b64`}</code></pre>
+
+          <h3>2.4 Verification Checklist</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>Command</th>
+                <th>Expected</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>File exists</td>
+                <td><code>ls -la cluster-ca.crt</code></td>
+                <td>Non-zero size</td>
+              </tr>
+              <tr>
+                <td>Valid X.509</td>
+                <td><code>openssl x509 -in cluster-ca.crt -noout</code></td>
+                <td>No errors</td>
+              </tr>
+              <tr>
+                <td>Is CA cert</td>
+                <td><code>openssl x509 ... | grep "CA:TRUE"</code></td>
+                <td><strong>CA:TRUE</strong></td>
+              </tr>
+              <tr>
+                <td>Not expired</td>
+                <td><code>openssl x509 ... -checkend 0</code></td>
+                <td>Will not expire</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="iamra-info-box success">
+            <strong>Output Files:</strong>
+            <ul>
+              <li><code>cluster-ca.crt</code> - PEM-encoded CA certificate (upload to AWS)</li>
+              <li><code>cluster-ca.crt.b64</code> - Base64-encoded certificate (for CLI/Terraform)</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Step 3: AWS Resources */}
+        <div className={`iamra-tab-content ${activeTab === 'step3' ? 'active' : ''}`}>
+          <h2><span className="iamra-step-badge manual">Manual</span> Step 3: Create AWS IAM Roles Anywhere Resources</h2>
+          <p><strong>Duration:</strong> 15 minutes</p>
+
+          <div className="iamra-info-box warning">
+            <strong>Manual Action Required:</strong> This step requires AWS Console access or AWS CLI with administrative permissions.
+          </div>
+
+          <h3>Option A: AWS Console (Recommended)</h3>
+
+          <h4>3.1 Create Trust Anchor</h4>
+          <ol>
+            <li>Navigate to IAM Roles Anywhere: <a href="https://console.aws.amazon.com/rolesanywhere" target="_blank" rel="noopener noreferrer">AWS Console</a></li>
+            <li>Select region: <code>us-east-1</code></li>
+            <li>Click "Create a trust anchor"</li>
+            <li>Configure:
+              <table>
+                <tbody>
+                  <tr><th>Field</th><th>Value</th></tr>
+                  <tr><td>Name</td><td><code>greensboro-edge-trust-anchor</code></td></tr>
+                  <tr><td>Certificate authority source</td><td>External certificate bundle</td></tr>
+                  <tr><td>External certificate bundle</td><td>Upload <code>cluster-ca.crt</code></td></tr>
+                </tbody>
+              </table>
+            </li>
+            <li>Click "Create trust anchor"</li>
+            <li><strong>Record the Trust Anchor ARN</strong></li>
+          </ol>
+
+          <h4>3.2 Create Profile</h4>
+          <ol>
+            <li>Click "Create a profile"</li>
+            <li>Configure:
+              <table>
+                <tbody>
+                  <tr><th>Field</th><th>Value</th></tr>
+                  <tr><td>Name</td><td><code>greensboro-edge-profile</code></td></tr>
+                  <tr><td>Session duration</td><td>3600 (1 hour)</td></tr>
+                  <tr><td>Require instance properties</td><td>Unchecked</td></tr>
+                  <tr><td>Role ARNs</td><td>Add in Step 4</td></tr>
+                </tbody>
+              </table>
+            </li>
+            <li>Click "Create profile"</li>
+            <li><strong>Record the Profile ARN</strong></li>
+          </ol>
+
+          <h3>Option B: AWS CLI</h3>
+          <pre><code>{`# Set variables
+export AWS_REGION="us-east-1"
+export AWS_ACCOUNT_ID="471112935967"
+export TRUST_ANCHOR_NAME="greensboro-edge-trust-anchor"
+export PROFILE_NAME="greensboro-edge-profile"
+
+# Create Trust Anchor
+CA_CERT_CONTENT=$(cat cluster-ca.crt)
+aws rolesanywhere create-trust-anchor \\
+  --name "\${TRUST_ANCHOR_NAME}" \\
+  --source "sourceData={x509CertificateData=\\"\${CA_CERT_CONTENT}\\"},sourceType=CERTIFICATE_BUNDLE" \\
+  --enabled \\
+  --region "\${AWS_REGION}"
+
+# Get Trust Anchor ARN
+TRUST_ANCHOR_ARN=$(aws rolesanywhere list-trust-anchors \\
+  --region "\${AWS_REGION}" \\
+  --query "trustAnchors[?name=='\${TRUST_ANCHOR_NAME}'].trustAnchorArn" \\
+  --output text)
+echo "Trust Anchor ARN: \${TRUST_ANCHOR_ARN}"
+
+# Create Profile
+aws rolesanywhere create-profile \\
+  --name "\${PROFILE_NAME}" \\
+  --duration-seconds 3600 \\
+  --enabled \\
+  --region "\${AWS_REGION}"
+
+# Get Profile ARN
+PROFILE_ARN=$(aws rolesanywhere list-profiles \\
+  --region "\${AWS_REGION}" \\
+  --query "profiles[?name=='\${PROFILE_NAME}'].profileArn" \\
+  --output text)
+echo "Profile ARN: \${PROFILE_ARN}"`}</code></pre>
+
+          <h3>3.3 Save Configuration</h3>
+          <pre><code>{`# Create configuration file
+cat > aws-config.env <<EOF
+# AWS IAM Roles Anywhere Configuration
+export AWS_ACCOUNT_ID="471112935967"
+export AWS_REGION="us-east-1"
+
+# Trust Anchor (from Step 3)
+export TRUST_ANCHOR_ARN="arn:aws:rolesanywhere:us-east-1:471112935967:trust-anchor/YOUR_ID"
+
+# Profile (from Step 3)
+export PROFILE_ARN="arn:aws:rolesanywhere:us-east-1:471112935967:profile/YOUR_ID"
+EOF
+
+echo "Update aws-config.env with actual ARN values!"`}</code></pre>
+
+          <h3>3.4 Verification</h3>
+          <pre><code>{`# Verify Trust Anchor
+aws rolesanywhere list-trust-anchors --region us-east-1
+
+# Verify Profile
+aws rolesanywhere list-profiles --region us-east-1`}</code></pre>
+
+          <div className="iamra-info-box success">
+            <strong>Checkpoint:</strong> Trust Anchor and Profile created, both show <code>"enabled": true</code>.
+          </div>
+        </div>
+
+        {/* Step 4: IAM Roles */}
+        <div className={`iamra-tab-content ${activeTab === 'step4' ? 'active' : ''}`}>
+          <h2><span className="iamra-step-badge manual">Manual</span> Step 4: Create IAM Roles with Trust Policies</h2>
+          <p><strong>Duration:</strong> 10 minutes</p>
+
+          <h3>4.1 Trust Policy Template</h3>
+          <p>This trust policy allows IAM Roles Anywhere to assume the role using certificates from your cluster.</p>
+
+          <pre><code>{`{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowRolesAnywhereAssumeRole",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "rolesanywhere.amazonaws.com"
+      },
+      "Action": [
+        "sts:AssumeRole",
+        "sts:TagSession",
+        "sts:SetSourceIdentity"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "arn:aws:rolesanywhere:us-east-1:ACCOUNT_ID:trust-anchor/TRUST_ANCHOR_ID"
+        }
+      }
+    }
+  ]
+}`}</code></pre>
+
+          <div className="iamra-info-box warning">
+            <strong>Important:</strong> Replace <code>ACCOUNT_ID</code> and <code>TRUST_ANCHOR_ID</code> with actual values.
+          </div>
+
+          <h3>4.2 Create Test Role</h3>
+          <p>Create a test role to verify IAMRA is working:</p>
+
+          <pre><code>{`# Load config
+source aws-config.env
+
+# Create trust policy file
+cat > /tmp/iamra-trust-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "rolesanywhere.amazonaws.com"
+      },
+      "Action": [
+        "sts:AssumeRole",
+        "sts:TagSession",
+        "sts:SetSourceIdentity"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "\${TRUST_ANCHOR_ARN}"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+# Create role
+aws iam create-role \\
+  --role-name greensboro-edge-test-role \\
+  --assume-role-policy-document file:///tmp/iamra-trust-policy.json \\
+  --tags Key=Cluster,Value=greensboro-edge Key=Purpose,Value=iamra-test
+
+# Attach read-only policy for testing
+aws iam attach-role-policy \\
+  --role-name greensboro-edge-test-role \\
+  --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess
+
+# Get role ARN
+TEST_ROLE_ARN=$(aws iam get-role \\
+  --role-name greensboro-edge-test-role \\
+  --query 'Role.Arn' --output text)
+echo "Test Role ARN: \${TEST_ROLE_ARN}"`}</code></pre>
+
+          <h3>4.3 Update Profile with Role ARNs</h3>
+          <pre><code>{`# Extract Profile ID from ARN
+PROFILE_ID=$(echo \${PROFILE_ARN} | rev | cut -d'/' -f1 | rev)
+
+# Update profile with test role
+aws rolesanywhere update-profile \\
+  --profile-id "\${PROFILE_ID}" \\
+  --role-arns "\${TEST_ROLE_ARN}" \\
+  --region "\${AWS_REGION}"
+
+# Verify
+aws rolesanywhere get-profile \\
+  --profile-id "\${PROFILE_ID}" \\
+  --region us-east-1 | jq '.profile.roleArns'`}</code></pre>
+
+          <h3>4.4 Update Configuration File</h3>
+          <pre><code>{`# Add role ARN to config
+cat >> aws-config.env <<EOF
+
+# Test Role (from Step 4)
+export TEST_ROLE_ARN="arn:aws:iam::471112935967:role/greensboro-edge-test-role"
+EOF`}</code></pre>
+
+          <div className="iamra-info-box success">
+            <strong>Checkpoint:</strong> Test role created with trust policy, added to Profile.
+          </div>
+        </div>
+
+        {/* Step 5: Cert Issuer */}
+        <div className={`iamra-tab-content ${activeTab === 'step5' ? 'active' : ''}`}>
+          <h2><span className="iamra-step-badge">Automated</span> Step 5: Configure Certificate Issuer</h2>
+          <p><strong>Duration:</strong> 5 minutes</p>
+
+          <h3>5.1 Create Cluster CA Secret</h3>
+          <p>cert-manager needs the CA key pair to sign certificates.</p>
+
+          <pre><code>{`# SSH to control plane node and extract CA key pair
+ssh user@control-plane-node
+
+# On the node:
+sudo cat /var/lib/rancher/rke2/server/tls/server-ca.crt > /tmp/ca.crt
+sudo cat /var/lib/rancher/rke2/server/tls/server-ca.key > /tmp/ca.key
+
+# Exit SSH and copy files locally
+exit
+scp user@control-plane-node:/tmp/ca.crt ./
+scp user@control-plane-node:/tmp/ca.key ./
+
+# Create secret in cert-manager namespace
+kubectl create secret tls cluster-ca-keypair \\
+  --cert=ca.crt \\
+  --key=ca.key \\
+  -n cert-manager
+
+# Clean up local files
+rm ca.crt ca.key`}</code></pre>
+
+          <div className="iamra-info-box info">
+            <strong>Alternative:</strong> If you cannot access the cluster CA key, you can create a dedicated CA for IAM Roles Anywhere. However, you'll need to upload this new CA to AWS as the Trust Anchor.
+          </div>
+
+          <h3>5.2 Create ClusterIssuer</h3>
+          <pre><code>{`cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: iamra-cluster-issuer
+  labels:
+    app.kubernetes.io/name: iamra-issuer
+    app.kubernetes.io/part-of: iam-roles-anywhere
+spec:
+  ca:
+    secretName: cluster-ca-keypair
+EOF`}</code></pre>
+
+          <h3>5.3 Verify Issuer</h3>
+          <pre><code>{`# Check ClusterIssuer status
+kubectl get clusterissuer iamra-cluster-issuer
+
+# Should show Ready=True
+kubectl get clusterissuer iamra-cluster-issuer -o yaml | grep -A5 "status:"`}</code></pre>
+
+          <h3>5.4 Test Certificate Issuance</h3>
+          <pre><code>{`# Create a test certificate
+cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: test-iamra-cert
+  namespace: default
+spec:
+  secretName: test-iamra-cert-tls
+  duration: 1h
+  renewBefore: 30m
+  commonName: test-pod.default.svc.cluster.local
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+  issuerRef:
+    name: iamra-cluster-issuer
+    kind: ClusterIssuer
+EOF
+
+# Wait and verify
+sleep 10
+kubectl get certificate test-iamra-cert -n default
+# Expected: Ready = True
+
+# Inspect the certificate
+kubectl get secret test-iamra-cert-tls -n default \\
+  -o jsonpath='{.data.tls\\.crt}' | base64 -d | \\
+  openssl x509 -text -noout | head -20
+
+# Cleanup
+kubectl delete certificate test-iamra-cert -n default
+kubectl delete secret test-iamra-cert-tls -n default`}</code></pre>
+
+          <div className="iamra-info-box success">
+            <strong>Checkpoint:</strong> ClusterIssuer Ready=True, test certificate issued successfully.
+          </div>
+        </div>
+
+        {/* Step 6: Test Setup */}
+        <div className={`iamra-tab-content ${activeTab === 'step6' ? 'active' : ''}`}>
+          <h2><span className="iamra-step-badge checkpoint">Checkpoint</span> Step 6: Test IAM Roles Anywhere Setup</h2>
+          <p><strong>Duration:</strong> 10 minutes</p>
+
+          <h3>Container Image</h3>
+          <div className="iamra-info-box info">
+            <strong>Pre-built Image:</strong> <code>ghcr.io/radpartners/iamra-sidecar:latest</code>
+            <ul>
+              <li>Contains AWS Signing Helper v1.3.0 binary</li>
+              <li>Based on Alpine 3.19 with glibc compatibility</li>
+              <li>ENTRYPOINT is <code>/usr/local/bin/aws_signing_helper</code></li>
+              <li>Must provide <code>args</code> with <code>serve</code> subcommand</li>
+            </ul>
+          </div>
+
+          <h3>6.1 Create Test ConfigMap</h3>
+          <pre><code>{`# Load configuration
+source aws-config.env
+
+# Create ConfigMap
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iamra-config
+  namespace: default
+data:
+  AWS_REGION: "\${AWS_REGION}"
+  TRUST_ANCHOR_ARN: "\${TRUST_ANCHOR_ARN}"
+  PROFILE_ARN: "\${PROFILE_ARN}"
+  ROLE_ARN: "\${TEST_ROLE_ARN}"
+EOF`}</code></pre>
+
+          <h3>6.2 Deploy Test Pod</h3>
+          <pre><code>{`cat <<EOF | kubectl apply -f -
+---
+# Certificate for the test pod
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: iamra-test-cert
+  namespace: default
+spec:
+  secretName: iamra-test-cert-tls
+  duration: 12h
+  renewBefore: 4h
+  commonName: "iamra-test.default.svc.cluster.local"
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+  issuerRef:
+    name: iamra-cluster-issuer
+    kind: ClusterIssuer
+---
+# Test pod with signing helper sidecar
+apiVersion: v1
+kind: Pod
+metadata:
+  name: iamra-test-pod
+  namespace: default
+  labels:
+    app: iamra-test
+spec:
+  containers:
+    # Test container with AWS CLI
+    - name: test-container
+      image: amazon/aws-cli:latest
+      command: ["sleep", "infinity"]
+      env:
+        - name: AWS_EC2_METADATA_SERVICE_ENDPOINT
+          value: "http://127.0.0.1:9911"
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: iamra-config
+              key: AWS_REGION
+
+    # AWS Signing Helper sidecar
+    - name: credential-helper
+      image: ghcr.io/radpartners/iamra-sidecar:latest
+      args:
+        - serve
+        - --certificate
+        - /iamra/tls.crt
+        - --private-key
+        - /iamra/tls.key
+        - --trust-anchor-arn
+        - \\$(TRUST_ANCHOR_ARN)
+        - --profile-arn
+        - \\$(PROFILE_ARN)
+        - --role-arn
+        - \\$(ROLE_ARN)
+        - --port
+        - "9911"
+      env:
+        - name: TRUST_ANCHOR_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: iamra-config
+              key: TRUST_ANCHOR_ARN
+        - name: PROFILE_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: iamra-config
+              key: PROFILE_ARN
+        - name: ROLE_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: iamra-config
+              key: ROLE_ARN
+      volumeMounts:
+        - name: iamra-certs
+          mountPath: /iamra
+          readOnly: true
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+
+  volumes:
+    - name: iamra-certs
+      secret:
+        secretName: iamra-test-cert-tls
+EOF`}</code></pre>
+
+          <h3>6.3 Wait for Pod to be Ready</h3>
+          <pre><code>{`# Wait for certificate
+kubectl wait --for=condition=Ready certificate/iamra-test-cert \\
+  -n default --timeout=60s
+
+# Wait for pod
+kubectl wait --for=condition=Ready pod/iamra-test-pod \\
+  -n default --timeout=120s
+
+# Check pod status
+kubectl get pod iamra-test-pod -n default
+# Expected: 2/2 Running`}</code></pre>
+
+          <h3>6.4 Verify Credential Helper</h3>
+          <pre><code>{`# Check signing helper logs
+kubectl logs iamra-test-pod -n default -c credential-helper
+
+# Test credential endpoint
+kubectl exec iamra-test-pod -n default -c test-container -- \\
+  curl -s http://127.0.0.1:9911/latest/meta-data/iam/security-credentials/`}</code></pre>
+
+          <h3>6.5 Test AWS API Access</h3>
+          <pre><code>{`# Test STS GetCallerIdentity
+kubectl exec iamra-test-pod -n default -c test-container -- \\
+  aws sts get-caller-identity
+
+# Expected output:
+# {
+#     "UserId": "AROA...:...",
+#     "Account": "471112935967",
+#     "Arn": "arn:aws:sts::471112935967:assumed-role/greensboro-edge-test-role/..."
+# }
+
+# Test S3 list (if ReadOnlyAccess attached)
+kubectl exec iamra-test-pod -n default -c test-container -- \\
+  aws s3 ls --region us-east-1 | head -5`}</code></pre>
+
+          <h3>6.6 Cleanup Test Resources</h3>
+          <pre><code>{`# Delete test pod and certificate
+kubectl delete pod iamra-test-pod -n default
+kubectl delete certificate iamra-test-cert -n default
+kubectl delete secret iamra-test-cert-tls -n default
+kubectl delete configmap iamra-config -n default`}</code></pre>
+
+          <div className="iamra-info-box success">
+            <strong>Success!</strong> If <code>aws sts get-caller-identity</code> returns your assumed role ARN, IAM Roles Anywhere is working correctly.
+          </div>
+
+          <h3>Verification Checklist</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>Expected Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Certificate issued</td>
+                <td>Ready=True</td>
+              </tr>
+              <tr>
+                <td>Pod running</td>
+                <td>2/2 containers Ready</td>
+              </tr>
+              <tr>
+                <td>Signing helper logs</td>
+                <td>No errors, serving on port 9911</td>
+              </tr>
+              <tr>
+                <td>Credential endpoint</td>
+                <td>Returns role name</td>
+              </tr>
+              <tr>
+                <td>STS GetCallerIdentity</td>
+                <td>Returns assumed role ARN</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Troubleshooting */}
+        <div className={`iamra-tab-content ${activeTab === 'troubleshooting' ? 'active' : ''}`}>
+          <h2>Troubleshooting Guide</h2>
+
+          <h3>Quick Diagnosis</h3>
+          <pre><code>{`# Quick status check
+echo "=== Certificates ===" && kubectl get certificates -A | grep iamra
+echo ""
+echo "=== Pods ===" && kubectl get pods -A | grep -E "(iamra|signing)"
+echo ""
+echo "=== Recent Events ===" && kubectl get events -A --sort-by='.lastTimestamp' | tail -20`}</code></pre>
+
+          <h3>Common Issues</h3>
+
+          <h4>1. ImagePullBackOff (401 Unauthorized)</h4>
+          <div className="iamra-info-box warning">
+            <strong>Symptom:</strong> <code>ErrImagePull: 401 Unauthorized</code>
+          </div>
+          <p><strong>Cause:</strong> Container image is on private registry.</p>
+          <pre><code>{`# Create ImagePullSecret
+kubectl create secret docker-registry github-registry-secret \\
+  --docker-server=ghcr.io \\
+  --docker-username=YOUR_GITHUB_USERNAME \\
+  --docker-password=YOUR_GITHUB_TOKEN \\
+  -n default
+
+# Add to pod spec:
+# spec:
+#   imagePullSecrets:
+#     - name: github-registry-secret`}</code></pre>
+
+          <h4>2. Container Shows Help and Exits</h4>
+          <div className="iamra-info-box warning">
+            <strong>Symptom:</strong> credential-helper container exits immediately, logs show help text
+          </div>
+          <p><strong>Cause:</strong> Missing <code>args</code> with <code>serve</code> subcommand.</p>
+          <pre><code>{`# CORRECT - use args:
+args:
+  - serve
+  - --certificate
+  - /iamra/tls.crt
+  - --private-key
+  - /iamra/tls.key
+  - --trust-anchor-arn
+  - $(TRUST_ANCHOR_ARN)
+  - --profile-arn
+  - $(PROFILE_ARN)
+  - --role-arn
+  - $(ROLE_ARN)
+  - --port
+  - "9911"`}</code></pre>
+
+          <h4>3. Certificate Not Ready</h4>
+          <div className="iamra-info-box warning">
+            <strong>Symptom:</strong> Certificate shows Ready=False
+          </div>
+          <pre><code>{`# Check certificate status
+kubectl describe certificate <cert-name> -n <namespace>
+
+# Check certificate request
+kubectl get certificaterequests -n <namespace>
+
+# Check issuer
+kubectl describe clusterissuer iamra-cluster-issuer
+
+# Check cert-manager logs
+kubectl logs -n cert-manager -l app=cert-manager --tail=100`}</code></pre>
+
+          <h4>4. AWS Authentication Failing</h4>
+          <div className="iamra-info-box warning">
+            <strong>Symptom:</strong> <code>AccessDenied</code> or <code>SignatureDoesNotMatch</code>
+          </div>
+          <pre><code>{`# Check signing helper logs
+kubectl logs <pod-name> -n <namespace> -c credential-helper --tail=50
+
+# Test credential endpoint manually
+kubectl exec <pod-name> -n <namespace> -c <container> -- \\
+  curl -v http://127.0.0.1:9911/latest/meta-data/iam/security-credentials/`}</code></pre>
+          <p><strong>Common causes:</strong></p>
+          <ul>
+            <li>Trust Anchor ARN incorrect</li>
+            <li>Profile ARN incorrect</li>
+            <li>Role ARN not in Profile</li>
+            <li>CA certificate doesn't match Trust Anchor</li>
+          </ul>
+
+          <h4>5. CA Certificate Issues</h4>
+          <div className="iamra-info-box critical">
+            <strong>Symptom:</strong> IAMRA fails even with correct ARNs
+          </div>
+          <p><strong>Cause:</strong> Certificate used for Trust Anchor has <code>CA:FALSE</code>.</p>
+          <pre><code>{`# Verify your CA certificate
+openssl x509 -in cluster-ca.crt -text -noout | grep -A2 "Basic Constraints"
+# MUST show: CA:TRUE
+
+# If CA:FALSE, re-extract from correct source:
+kubectl get configmap kube-root-ca.crt \\
+  -n kube-system \\
+  -o jsonpath='{.data.ca\\.crt}' > cluster-ca.crt
+
+# Then re-upload to AWS Trust Anchor`}</code></pre>
+
+          <h4>6. x509: certificate signed by unknown authority</h4>
+          <div className="iamra-info-box warning">
+            <strong>Symptom:</strong> SSL certificate verification errors
+          </div>
+          <p><strong>Cause:</strong> Container missing CA certificates for AWS connections.</p>
+          <p>The pre-built <code>ghcr.io/radpartners/iamra-sidecar:latest</code> image includes CA certificates. If building your own, ensure <code>ca-certificates</code> package is installed.</p>
+
+          <h3>AWS-Side Verification</h3>
+          <pre><code>{`# Verify Trust Anchor
+aws rolesanywhere list-trust-anchors --region us-east-1
+
+# Verify Profile
+aws rolesanywhere list-profiles --region us-east-1
+
+# Verify Role Trust Policy
+aws iam get-role --role-name greensboro-edge-test-role \\
+  --query 'Role.AssumeRolePolicyDocument'
+
+# Check CloudTrail for auth failures
+aws cloudtrail lookup-events \\
+  --lookup-attributes AttributeKey=EventSource,AttributeValue=rolesanywhere.amazonaws.com \\
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \\
+  --max-results 20`}</code></pre>
+
+          <h3>Collect Diagnostics</h3>
+          <pre><code>{`#!/bin/bash
+OUTPUT_DIR="/tmp/iamra-diagnostics-$(date +%Y%m%d-%H%M%S)"
+mkdir -p $OUTPUT_DIR
+
+# Certificates
+kubectl get certificates -A -o yaml > $OUTPUT_DIR/certificates.yaml
+kubectl get certificaterequests -A -o yaml > $OUTPUT_DIR/certificate-requests.yaml
+
+# ClusterIssuer
+kubectl get clusterissuer -o yaml > $OUTPUT_DIR/cluster-issuer.yaml
+
+# Pod descriptions
+kubectl describe pods -n default -l app=iamra-test > $OUTPUT_DIR/pod-describe.txt
+
+# Logs
+kubectl logs -n default -l app=iamra-test -c credential-helper --tail=500 > $OUTPUT_DIR/signing-helper.log 2>&1
+
+# cert-manager logs
+kubectl logs -n cert-manager -l app=cert-manager --tail=500 > $OUTPUT_DIR/cert-manager.log 2>&1
+
+# Events
+kubectl get events -A --sort-by='.lastTimestamp' > $OUTPUT_DIR/events.txt
+
+echo "Diagnostics collected to $OUTPUT_DIR"`}</code></pre>
+
+          <h3>References</h3>
+          <ul>
+            <li><a href="https://aws.amazon.com/blogs/security/connect-your-on-premises-kubernetes-cluster-to-aws-apis-using-iam-roles-anywhere/" target="_blank" rel="noopener noreferrer">AWS Blog: Connect on-premises Kubernetes to AWS using IAM Roles Anywhere</a></li>
+            <li><a href="https://github.com/aws-samples/aws-iam-ra-for-kubernetes" target="_blank" rel="noopener noreferrer">GitHub: aws-samples/aws-iam-ra-for-kubernetes</a></li>
+            <li><a href="https://docs.aws.amazon.com/rolesanywhere/latest/userguide/introduction.html" target="_blank" rel="noopener noreferrer">AWS IAM Roles Anywhere Documentation</a></li>
+            <li><a href="https://cert-manager.io/docs/" target="_blank" rel="noopener noreferrer">cert-manager Documentation</a></li>
+          </ul>
+        </div>
+      </div>
+    </DocPage>
+  );
+};
+
+export default IamRolesAnywhereSetup;

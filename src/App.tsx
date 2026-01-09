@@ -17,6 +17,7 @@ import BlackboxExporterSetup from './pages/BlackboxExporterSetup';
 import VectorInstall from './pages/VectorInstall';
 import KafkaCli from './pages/KafkaCli';
 import NetToolsPod from './pages/NetToolsPod';
+import IamRolesAnywhereSetup from './pages/IamRolesAnywhereSetup';
 import './index.css';
 
 function HomePage() {
@@ -61,6 +62,7 @@ function App() {
         <Route path="/docs/vector-install" element={<DocLayout><VectorInstall /></DocLayout>} />
         <Route path="/docs/kafka-cli" element={<DocLayout><KafkaCli /></DocLayout>} />
         <Route path="/docs/net-tools-pod" element={<DocLayout><NetToolsPod /></DocLayout>} />
+        <Route path="/docs/iam-roles-anywhere-setup" element={<DocLayout><IamRolesAnywhereSetup /></DocLayout>} />
       </Routes>
     </>
   );
