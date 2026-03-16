@@ -53,7 +53,7 @@ Configure AWS to trust your AKS cluster and create a role with specific permissi
       * In the AWS IAM Console, go to **Identity providers** and click **Add provider**.
       * **Provider type**: `OpenID Connect`.
       * **Provider URL**: Paste the AKS issuer URL from Step 1.
-      * **Audience**: Enter exactly `sts.amazonaws.com`.
+      * **Audience**: Enter exactly `api://AzureADTokenExchange`.
       * Click **Get thumbprint** and **Add provider**.
 
     **Option B: Using AWS CLI**
@@ -67,7 +67,7 @@ Configure AWS to trust your AKS cluster and create a role with specific permissi
     # Create the OIDC provider
     aws iam create-open-id-connect-provider \
       --url "<your-aks-issuer-url>" \
-      --client-id-list "sts.amazonaws.com" \
+      --client-id-list "api://AzureADTokenExchange" \
       --thumbprint-list $THUMBPRINT
     ```
 
@@ -359,3 +359,13 @@ To manually test the OIDC federation and AWS role assumption from within a pod:
   - Verify the Azure identity token file exists and is readable
   - Check the AWS role ARN is correct in Prometheus configuration
   - Ensure the role's trust policy allows your specific service account
+
+**Issue: Incorrect token audience**
+- **Error**: `InvalidIdentityToken: Incorrect token audience`
+- **Root cause**: The Azure workload identity token has audience `api://AzureADTokenExchange`, not `sts.amazonaws.com`. If the IAM OIDC provider was created with `--client-id-list "sts.amazonaws.com"`, AWS STS will reject the token.
+- **Solution**: Add `api://AzureADTokenExchange` to the OIDC provider's client ID list:
+  ```bash
+  aws iam add-client-id-to-open-id-connect-provider \
+    --open-id-connect-provider-arn "arn:aws:iam::<account-id>:oidc-provider/<issuer-host>" \
+    --client-id "api://AzureADTokenExchange"
+  ```
