@@ -34,3 +34,22 @@ export const Brain = () => (
     <path d="M9.5 14.5h5"></path>
   </svg>
 );
+
+export const Shield = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+  </svg>
+);
+
+export const Cloud = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.5 19A5.5 5.5 0 0 1 12 13.5A5.5 5.5 0 0 1 6.5 19H5.5A4.5 4.5 0 1 1 5.5 10h.5a7 7 0 1 1 13 4a4.5 4.5 0 1 1-.5 9z"></path>
+  </svg>
+);
+
+export const Eye = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+    <circle cx="12" cy="12" r="3"></circle>
+  </svg>
+);

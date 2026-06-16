@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GitHub, ExternalLink, Terminal, Code, Brain } from './icons';
+import { GitHub, ExternalLink, Terminal, Code, Brain, Shield, Cloud, Eye } from './icons';
 import './ProjectsSection.css';
 
 interface Project {
@@ -28,6 +28,17 @@ const projects: Project[] = [
     featured: true
   },
   {
+    id: 'azutil',
+    title: 'azutil',
+    description: 'Enterprise Azure CLI & AKS management utility',
+    longDescription: 'A comprehensive command-line utility that simplifies Azure authentication and AKS cluster management. Provides profile-based access to different Azure environments with enhanced diagnostics, session tracking, and namespace management.',
+    tech: ['Bash', 'Azure CLI', 'kubectl', 'yq'],
+    icon: <Cloud />,
+    github: 'https://github.com/achandra-rp/azutil',
+    category: 'infrastructure',
+    featured: true
+  },
+  {
     id: 'py-awsutil',
     title: 'py-awsutil',
     description: 'Python AWS utility with enhanced features',
@@ -35,6 +46,17 @@ const projects: Project[] = [
     tech: ['Python', 'AWS CLI', 'kubectl', 'psutil', 'PyYAML'],
     icon: <Code />,
     github: 'https://github.com/achandra-rp/py-awsutil',
+    category: 'development',
+    featured: true
+  },
+  {
+    id: 'claude-view',
+    title: 'Claude View',
+    description: 'Log viewer for Claude Code conversations',
+    longDescription: 'A Go-based web application and daemon for browsing, searching, and re-reading Claude Code conversation logs. Features markdown rendering, tool output collapsing, and a clean, responsive UI for local-first analysis of AI interactions.',
+    tech: ['Go', 'Markdown', 'XSS-Safe', 'Daemon'],
+    icon: <Eye />,
+    github: 'https://github.com/achandra-rp/claude-conversation-viewer',
     category: 'development',
     featured: true
   },
@@ -47,6 +69,17 @@ const projects: Project[] = [
     icon: <Brain />,
     github: 'https://github.com/abhichandra21/Promptheus',
     category: 'ai',
+    featured: true
+  },
+  {
+    id: 'net-sentinel',
+    title: 'Net Sentinel',
+    description: 'Network monitoring with fault attribution',
+    longDescription: 'A dual-probe monitoring solution designed to diagnose internet connectivity issues with clear fault attribution. Features a Local Sentinel for internal health and a Cloud Probe for external reachability, reporting in real-time to Home Assistant.',
+    tech: ['Python', 'Docker', 'MQTT', 'Home Assistant'],
+    icon: <Shield />,
+    github: 'https://github.com/abhichandra21/net-sentinel',
+    category: 'infrastructure',
     featured: true
   },
   {

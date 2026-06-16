@@ -42,7 +42,7 @@ kubectl logs daemonsets/vector-efs --all-containers --ignore-errors --timestamps
       <h3>Vector-Specific Log Analysis</h3>
       <pre><code>{`# Vector JSON log parsing for application-specific logs
 kubectl logs -n vector vector-efs-0 | jq -R 'fromjson? | select(.application | test("db-store-v5-deployment")) | .message'
-kubectl logs -n vector vector-efs-0 | awk -F: '/{\"application\"/{print $2}' | sort | uniq -c
+kubectl logs -n vector vector-efs-0 | awk -F: '/{"application"/{print $2}' | sort | uniq -c
 
 # Count specific events across all Vector pods
 for pod in $(kubectl get po -n vector | awk '/efs/{print $1}'); do
