@@ -48,6 +48,28 @@ const projects: Project[] = [
     github: 'https://github.com/abhichandra21/Promptheus',
     category: 'ai',
     featured: true
+  },
+  {
+    id: 'streamline',
+    title: 'Streamline',
+    description: 'Personal streaming recommendation engine',
+    longDescription: 'Ingests real watch history from Netflix, Prime Video, and Apple TV, enriches every title via TMDB and LLM, then builds a detailed taste profile from your entire history. Answers natural-language queries using hybrid candidate generation — TMDB Discover for structured filters plus LLM semantic suggestions for creative matches. Supports multiple AI providers with role-based model dispatch.',
+    tech: ['Python', 'Flask', 'HTMX', 'TMDB', 'Claude', 'Gemini', 'OpenAI'],
+    icon: <Brain />,
+    github: 'https://github.com/abhichandra21/streamline',
+    category: 'ai',
+    featured: true
+  },
+  {
+    id: 'magpie',
+    title: 'Magpie',
+    description: 'Local-first photo tagger using vision LLMs',
+    longDescription: 'A CLI and daemon that uses vision-capable LLMs via any OpenAI-compatible endpoint (including local Ollama) to tag JPEG and HEIC photos with IPTC captions and keywords, writing metadata directly into the files. Lightroom Classic, Photos.app, and Finder see the tags natively. Supports a local Mac model and a remote NVIDIA DGX Spark for larger vision models.',
+    tech: ['Python', 'Typer', 'Ollama', 'exiftool', 'watchdog', 'asyncio'],
+    icon: <Code />,
+    github: 'https://github.com/abhichandra21/magpie',
+    category: 'ai',
+    featured: true
   }
 ];
 
